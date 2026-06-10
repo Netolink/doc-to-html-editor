@@ -29,7 +29,9 @@ import {
   Sparkles,
   RefreshCw,
   HelpCircle,
-  X
+  X,
+  Undo,
+  Redo
 } from 'lucide-react';
 
 const formatHTML = (html: string): string => {
@@ -239,17 +241,82 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, [showTablePicker, showCleanOptions, contextMenu]);
 
-  // Keyboard binding for Ctrl + H
+  // Comprehensive Custom Keyboard shortcuts for the editor
   useEffect(() => {
     const handleKey = (e: KeyboardEvent) => {
-      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h') {
-        e.preventDefault();
-        setShowFindReplace(prev => !prev);
+      // Check for control/meta key combinations
+      if (e.ctrlKey || e.metaKey) {
+        const key = e.key.toLowerCase();
+        
+        // Let normal browser native keys handle inputs
+        const active = document.activeElement;
+        const isInputFocused = active && 
+          (active.tagName === 'INPUT' || active.tagName === 'TEXTAREA') && 
+          (!quillRef.current || active !== quillRef.current.root);
+
+        if (isInputFocused && key !== 'h') {
+          // Allow default for native inputs except Ctrl+H Find & Replace
+          return;
+        }
+
+        switch (key) {
+          case 'z':
+            if (activeTab === 'word' && quillRef.current) {
+              e.preventDefault();
+              quillRef.current.history.undo();
+            }
+            break;
+          case 'y':
+            if (activeTab === 'word' && quillRef.current) {
+              e.preventDefault();
+              quillRef.current.history.redo();
+            }
+            break;
+          case 'b':
+            if (activeTab === 'word' && quillRef.current) {
+              e.preventDefault();
+              executeCommand('bold');
+            }
+            break;
+          case 'i':
+            if (activeTab === 'word' && quillRef.current) {
+              e.preventDefault();
+              executeCommand('italic');
+            }
+            break;
+          case 'u':
+            if (activeTab === 'word' && quillRef.current) {
+              e.preventDefault();
+              executeCommand('underline');
+            }
+            break;
+          case 'k':
+            if (activeTab === 'word' && quillRef.current) {
+              e.preventDefault();
+              const url = prompt("Enter link URL:", "https://");
+              if (url) {
+                executeCommand('createlink', url);
+              }
+            }
+            break;
+          case 'h':
+            e.preventDefault();
+            setShowFindReplace(prev => !prev);
+            break;
+          case 'a':
+            if (activeTab === 'word' && quillRef.current) {
+              e.preventDefault();
+              quillRef.current.setSelection(0, quillRef.current.getLength());
+            }
+            break;
+          default:
+            break;
+        }
       }
     };
     document.addEventListener('keydown', handleKey);
     return () => document.removeEventListener('keydown', handleKey);
-  }, []);
+  }, [activeTab, showInlineSource]);
 
   // Update counters based on input text
   const calculateCounters = (htmlContent: string) => {
@@ -497,6 +564,18 @@ export default function App() {
     const content = quill.root.innerHTML;
     setDocumentHtml(content);
     calculateCounters(content);
+  };
+
+  const handleUndo = () => {
+    if (activeTab === 'word' && quillRef.current) {
+      quillRef.current.history.undo();
+    }
+  };
+
+  const handleRedo = () => {
+    if (activeTab === 'word' && quillRef.current) {
+      quillRef.current.history.redo();
+    }
   };
 
   // Clear Formatting using Quill APIs
@@ -1210,7 +1289,14 @@ export default function App() {
               {/* Rich Text Custom Toolbar */}
               <div id="rich-toolbar-dock" className="bg-[#f8f9fa] border-b border-[#dee2e6] p-2 flex flex-wrap gap-1 items-center select-none text-gray-700">
                 
-
+                {/* Undo / Redo */}
+                <button type="button" onClick={handleUndo} title="Undo (Ctrl+Z)" className="p-1.5 rounded hover:bg-gray-200 text-gray-700">
+                  <Undo className="w-4 h-4 stroke-[2.5]" />
+                </button>
+                <button type="button" onClick={handleRedo} title="Redo (Ctrl+Y)" className="p-1.5 rounded hover:bg-gray-200 text-gray-700">
+                  <Redo className="w-4 h-4 stroke-[2.5]" />
+                </button>
+                <div className="h-5 w-[1px] bg-gray-300 mx-1"></div>
 
                 {/* Clear Formatting */}
                 <button type="button" onClick={clearFormatting} title="Clear Formatting (Selection)" className="p-1.5 rounded hover:bg-gray-200 text-red-600">
