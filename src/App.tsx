@@ -312,6 +312,27 @@ export default function App() {
     }
   };
 
+  // Native Undo/Redo operations
+  const handleUndo = () => {
+    if (quillRef.current) {
+      quillRef.current.focus();
+      const hist = quillRef.current.history || quillRef.current.getModule('history');
+      if (hist) {
+        hist.undo();
+      }
+    }
+  };
+
+  const handleRedo = () => {
+    if (quillRef.current) {
+      quillRef.current.focus();
+      const hist = quillRef.current.history || quillRef.current.getModule('history');
+      if (hist) {
+        hist.redo();
+      }
+    }
+  };
+
   // Standard WYSIWYG command executive targeting Quill API
   const executeCommand = (command: string, arg: string = '') => {
     if (!quillRef.current) return;
@@ -323,12 +344,16 @@ export default function App() {
     const formats = quill.getFormat();
 
     switch (command.toLowerCase()) {
-      case 'undo':
-        quill.history.undo();
+      case 'undo': {
+        const hist = quill.history || quill.getModule('history');
+        if (hist) hist.undo();
         break;
-      case 'redo':
-        quill.history.redo();
+      }
+      case 'redo': {
+        const hist = quill.history || quill.getModule('history');
+        if (hist) hist.redo();
         break;
+      }
       case 'bold':
         quill.format('bold', !formats.bold);
         break;
@@ -1139,10 +1164,10 @@ export default function App() {
               <div id="rich-toolbar-dock" className="bg-[#f8f9fa] border-b border-[#dee2e6] p-2 flex flex-wrap gap-1 items-center select-none text-gray-700">
                 
                 {/* Undo / Redo */}
-                <button type="button" onClick={() => executeCommand('undo')} title="Undo" className="p-1.5 rounded hover:bg-gray-200 text-gray-700">
+                <button type="button" onClick={handleUndo} title="Undo" className="p-1.5 rounded hover:bg-gray-200 text-gray-700">
                   <Undo className="w-4 h-4 stroke-[2.5]" />
                 </button>
-                <button type="button" onClick={() => executeCommand('redo')} title="Redo" className="p-1.5 rounded hover:bg-gray-200 text-gray-700">
+                <button type="button" onClick={handleRedo} title="Redo" className="p-1.5 rounded hover:bg-gray-200 text-gray-700">
                   <Redo className="w-4 h-4 stroke-[2.5]" />
                 </button>
                 <div className="h-5 w-[1px] bg-gray-300 mx-1"></div>
