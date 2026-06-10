@@ -129,6 +129,7 @@ export default function App() {
 
   // Refs
   const editorRef = useRef<HTMLDivElement>(null);
+  const quillRef = useRef<any>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const htmlTextareaRef = useRef<HTMLTextAreaElement>(null);
   const tablePickerRef = useRef<HTMLDivElement>(null);
@@ -177,11 +178,6 @@ export default function App() {
     return () => document.removeEventListener('keydown', handleKey);
   }, []);
 
-  // Sync initial word count
-  useEffect(() => {
-    calculateCounters(documentHtml);
-  }, []);
-
   // Update counters based on input text
   const calculateCounters = (htmlContent: string) => {
     const tempDiv = document.createElement('div');
@@ -201,9 +197,79 @@ export default function App() {
     }
   };
 
+  // Sync initial word count
+  useEffect(() => {
+    calculateCounters(documentHtml);
+
+    // Only initialize once
+    if (quillRef.current) return;
+
+    const Quill = (window as any).Quill;
+    if (Quill && editorRef.current) {
+      // Register custom horizontal rule (divider) blotting
+      try {
+        const BlockEmbed = Quill.import('blots/block/embed');
+        class DividerBlot extends BlockEmbed {
+          static create() {
+            const node = document.createElement('hr');
+            node.setAttribute('class', 'my-4 border-t border-gray-300');
+            return node;
+          }
+        }
+        DividerBlot.blotName = 'divider';
+        DividerBlot.tagName = 'hr';
+        Quill.register(DividerBlot, true);
+      } catch (err) {
+        console.warn("Blot registration skipped/existing", err);
+      }
+
+      // Initialize Quill
+      const quill = new Quill(editorRef.current, {
+        theme: 'snow',
+        placeholder: 'Write your document here or paste it directly from Microsoft Word or Google Docs...',
+        modules: {
+          toolbar: false, // Programmatic toolbar buttons
+          table: true,    // Native table module activation
+          history: {
+            delay: 1000,
+            maxStack: 100,
+            userOnly: true
+          }
+        }
+      });
+
+      quillRef.current = quill;
+
+      // Set initial content
+      quill.root.innerHTML = documentHtml;
+
+      // Listen for text-change events and sync state changes
+      quill.on('text-change', () => {
+        const content = quill.root.innerHTML;
+        setDocumentHtml(content);
+        calculateCounters(content);
+      });
+
+      // Right-click context menu on table elements inside Quill
+      quill.root.addEventListener('contextmenu', (e: MouseEvent) => {
+        const target = e.target as HTMLElement;
+        const cell = target.closest('td') || target.closest('th');
+        if (cell) {
+          e.preventDefault();
+          setSelectedCell(cell as HTMLTableCellElement);
+          setContextMenu({
+            visible: true,
+            x: e.clientX,
+            y: e.clientY + window.scrollY,
+          });
+        }
+      });
+    }
+  }, []);
+
   const handleWordInput = () => {
-    if (editorRef.current) {
-      const content = editorRef.current.innerHTML;
+    if (quillRef.current) {
+      const content = quillRef.current.root.innerHTML;
       setDocumentHtml(content);
       calculateCounters(content);
     }
@@ -218,6 +284,9 @@ export default function App() {
       if (showInlineSource && textareaRef.current) {
         finalContent = textareaRef.current.value;
         setDocumentHtml(finalContent);
+      } else if (quillRef.current) {
+        finalContent = quillRef.current.root.innerHTML;
+        setDocumentHtml(finalContent);
       } else if (editorRef.current) {
         finalContent = editorRef.current.innerHTML;
         setDocumentHtml(finalContent);
@@ -227,39 +296,152 @@ export default function App() {
       setActiveTab(tab);
     } else {
       // Sync from HTML Tab back to WYSIWYG
+      let finalContent = documentHtml;
       if (htmlTextareaRef.current) {
-        setDocumentHtml(htmlTextareaRef.current.value);
+        finalContent = htmlTextareaRef.current.value;
+        setDocumentHtml(finalContent);
       }
       setActiveTab(tab);
       setShowInlineSource(false);
-    }
-  };
 
-  // Standard WYSIWYG command executive
-  const executeCommand = (command: string, arg: string = '') => {
-    document.execCommand(command, false, arg);
-    handleWordInput();
-    if (editorRef.current) {
-      editorRef.current.focus();
-    }
-  };
-
-  // Clear Formatting
-  const clearFormatting = () => {
-    document.execCommand('removeFormat', false);
-    // Extra visual step to remove inline style attributes from selection range
-    const sel = window.getSelection();
-    if (sel && !sel.isCollapsed) {
-      let node: Node | null = sel.anchorNode;
-      while (node && node !== editorRef.current) {
-        if (node.nodeType === 1) { // Element
-          (node as HTMLElement).removeAttribute('style');
+      setTimeout(() => {
+        if (quillRef.current) {
+          quillRef.current.root.innerHTML = finalContent;
         }
-        node = node.parentNode;
-      }
+      }, 50);
     }
-    handleWordInput();
-    triggerToast("Cleared select style overrides!");
+  };
+
+  // Standard WYSIWYG command executive targeting Quill API
+  const executeCommand = (command: string, arg: string = '') => {
+    if (!quillRef.current) return;
+    const quill = quillRef.current;
+    
+    // Maintain selection / focus inside Quill
+    quill.focus();
+
+    const formats = quill.getFormat();
+
+    switch (command.toLowerCase()) {
+      case 'undo':
+        quill.history.undo();
+        break;
+      case 'redo':
+        quill.history.redo();
+        break;
+      case 'bold':
+        quill.format('bold', !formats.bold);
+        break;
+      case 'italic':
+        quill.format('italic', !formats.italic);
+        break;
+      case 'underline':
+        quill.format('underline', !formats.underline);
+        break;
+      case 'strikethrough':
+        quill.format('strike', !formats.strike);
+        break;
+      case 'formatblock': {
+        const tag = arg.toLowerCase();
+        if (tag === 'h1' || tag === '<h1>') quill.format('header', 1);
+        else if (tag === 'h2' || tag === '<h2>') quill.format('header', 2);
+        else if (tag === 'h3' || tag === '<h3>') quill.format('header', 3);
+        else if (tag === 'h4' || tag === '<h4>') quill.format('header', 4);
+        else if (tag === 'blockquote' || tag === '<blockquote>') quill.format('blockquote', !formats.blockquote);
+        else if (tag === 'pre' || tag === '<pre>') quill.format('code-block', !formats['code-block']);
+        else {
+          quill.format('header', false);
+          quill.format('blockquote', false);
+          quill.format('code-block', false);
+        }
+        break;
+      }
+      case 'justifyleft':
+        quill.format('align', false);
+        break;
+      case 'justifycenter':
+        quill.format('align', 'center');
+        break;
+      case 'justifyright':
+        quill.format('align', 'right');
+        break;
+      case 'justifyfull':
+        quill.format('align', 'justify');
+        break;
+      case 'insertunorderedlist':
+        quill.format('list', formats.list === 'bullet' ? false : 'bullet');
+        break;
+      case 'insertorderedlist':
+        quill.format('list', formats.list === 'ordered' ? false : 'ordered');
+        break;
+      case 'outdent':
+        quill.format('indent', formats.indent ? formats.indent - 1 : false);
+        break;
+      case 'indent':
+        quill.format('indent', (formats.indent || 0) + 1);
+        break;
+      case 'createlink':
+        quill.format('link', arg);
+        break;
+      case 'unlink':
+        quill.format('link', false);
+        break;
+      case 'insertimage': {
+        const range = quill.getSelection(true);
+        if (range) {
+          quill.insertEmbed(range.index, 'image', arg);
+          quill.setSelection(range.index + 1);
+        }
+        break;
+      }
+      case 'forecolor':
+        quill.format('color', arg);
+        break;
+      case 'hilitecolor':
+        quill.format('background', arg);
+        break;
+      case 'inserthorizontalrule': {
+         const range = quill.getSelection(true);
+         if (range) {
+           quill.insertEmbed(range.index, 'divider', true);
+           // insert new line
+           quill.insertText(range.index + 1, '\n');
+           quill.setSelection(range.index + 2);
+         }
+         break;
+      }
+      case 'inserthtml': {
+        const range = quill.getSelection(true);
+        if (range) {
+          quill.clipboard.dangerouslyPasteHTML(range.index, arg);
+        }
+        break;
+      }
+      default:
+        // Fail-safe fallback to execCommand
+        document.execCommand(command, false, arg);
+    }
+    
+    // Sync React state and triggers
+    const content = quill.root.innerHTML;
+    setDocumentHtml(content);
+    calculateCounters(content);
+  };
+
+  // Clear Formatting using Quill APIs
+  const clearFormatting = () => {
+    if (quillRef.current) {
+      const range = quillRef.current.getSelection();
+      if (range) {
+        quillRef.current.removeFormat(range.index, range.length);
+        const content = quillRef.current.root.innerHTML;
+        setDocumentHtml(content);
+        calculateCounters(content);
+      }
+    } else {
+      document.execCommand('removeFormat', false);
+    }
+    triggerToast("Cleared text override styling!");
   };
 
   // Setup prompt Link
@@ -280,6 +462,10 @@ export default function App() {
   // Manually toggle direction
   const toggleDirectionState = (dir: 'LTR' | 'RTL') => {
     setDirection(dir);
+    if (quillRef.current) {
+      quillRef.current.root.dir = dir.toLowerCase();
+      quillRef.current.root.style.textAlign = dir === 'RTL' ? 'right' : 'left';
+    }
     if (editorRef.current) {
       editorRef.current.dir = dir.toLowerCase();
       editorRef.current.style.textAlign = dir === 'RTL' ? 'right' : 'left';
@@ -295,7 +481,6 @@ export default function App() {
     if (html) {
       e.preventDefault();
       
-      // Basic strip comments and style tags on pasting
       let parsed = html;
       parsed = parsed.replace(/<link.*?>/gi, '');
       parsed = parsed.replace(/<style([\s\S]*?)>([\s\S]*?)<\/style>/gi, '');
@@ -304,7 +489,6 @@ export default function App() {
       const tempDiv = document.createElement('div');
       tempDiv.innerHTML = parsed;
 
-      // Filter out high-bloat Google Internal Guidance wrappers first
       const spans = tempDiv.querySelectorAll('span');
       spans.forEach(s => {
         if (s.id && s.id.startsWith('docs-internal-guid')) {
@@ -344,8 +528,50 @@ export default function App() {
     }
   };
 
-  // Table context manipulations
+  // Table context manipulations targeting native Quill table API to avoid model desync
   const runTableAction = (action: string) => {
+    if (quillRef.current) {
+      const tableModule = quillRef.current.getModule('table');
+      if (tableModule) {
+        switch (action) {
+          case 'addRowAbove':
+            tableModule.insertRowAbove();
+            break;
+          case 'addRowBelow':
+            tableModule.insertRowBelow();
+            break;
+          case 'deleteRow':
+            tableModule.deleteRow();
+            break;
+          case 'addColumnLeft':
+            tableModule.insertColumnLeft();
+            break;
+          case 'addColumnRight':
+            tableModule.insertColumnRight();
+            break;
+          case 'deleteColumn':
+            tableModule.deleteColumn();
+            break;
+          case 'deleteTable':
+            tableModule.deleteTable();
+            break;
+          case 'mergeCells':
+            triggerToast("Cell merges are done programmatically in native grids.");
+            break;
+          case 'splitCell':
+            triggerToast("Cell splits are done programmatically in native grids.");
+            break;
+        }
+        // Force refresh and sync
+        const content = quillRef.current.root.innerHTML;
+        setDocumentHtml(content);
+        calculateCounters(content);
+        setContextMenu(prev => ({ ...prev, visible: false }));
+        triggerToast("Table layout restructured!");
+        return;
+      }
+    }
+
     if (!selectedCell) return;
     const tr = selectedCell.parentNode as HTMLTableRowElement;
     const table = tr.closest('table');
@@ -439,6 +665,9 @@ export default function App() {
         const updated = html.replace(regex, replaceText);
         setDocumentHtml(updated);
         calculateCounters(updated);
+        if (quillRef.current) {
+          quillRef.current.root.innerHTML = updated;
+        }
         triggerToast("Replaced next occurrence.");
       } else {
         triggerToast("No matching phrase to replace.");
@@ -450,6 +679,9 @@ export default function App() {
         const updated = html.replace(regex, replaceText);
         setDocumentHtml(updated);
         calculateCounters(updated);
+        if (quillRef.current) {
+          quillRef.current.root.innerHTML = updated;
+        }
         triggerToast(`Replaced all ${count} occurrences.`);
       } else {
         triggerToast("No occurrences found.");
@@ -768,6 +1000,9 @@ export default function App() {
 
     const finalResult = outputHtml.trim();
     setDocumentHtml(finalResult);
+    if (quillRef.current) {
+      quillRef.current.root.innerHTML = finalResult;
+    }
     setHasCleanedHistory(true);
     setShowCleanOptions(false);
     triggerToast("Applied advanced DOM cleanup parameters successfully!");
@@ -776,6 +1011,9 @@ export default function App() {
   const undoHtmlClean = () => {
     if (!hasCleanedHistory) return;
     setDocumentHtml(originalBeforeClean);
+    if (quillRef.current) {
+      quillRef.current.root.innerHTML = originalBeforeClean;
+    }
     setHasCleanedHistory(false);
     triggerToast("Undone last cleaning filters!");
   };
@@ -1068,6 +1306,9 @@ export default function App() {
                       // Save text
                       const htmlVal = textareaRef.current.value;
                       setDocumentHtml(htmlVal);
+                      if (quillRef.current) {
+                        quillRef.current.root.innerHTML = htmlVal;
+                      }
                     }
                     setShowInlineSource(!showInlineSource);
                   }}
@@ -1121,12 +1362,7 @@ export default function App() {
                 <div
                   ref={editorRef}
                   id="editable-html-wysiwyg"
-                  contentEditable="true"
-                  onInput={handleWordInput}
-                  onPaste={handlePaste}
-                  onContextMenu={handleTableCellContextMenu}
                   className={`editor-content max-w-3xl mx-auto min-h-[420px] max-h-[700px] overflow-y-auto outline-none ${showInlineSource ? 'hidden' : 'block'}`}
-                  dangerouslySetInnerHTML={{ __html: documentHtml }}
                   dir={direction.toLowerCase()}
                   style={{ textAlign: direction === 'RTL' ? 'right' : 'left' }}
                 />
