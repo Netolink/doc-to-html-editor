@@ -86,6 +86,24 @@ const formatHTML = (html: string): string => {
   return formatted.trim();
 };
 
+const normalizeHTML = (html: string): string => {
+  if (!html) return '';
+  return html
+    .replace(/\s+/g, '')
+    .replace(/\/>/g, '>')
+    .replace(/<p><br><\/p>/gi, '<p></p>')
+    .replace(/<p>&nbsp;<\/p>/gi, '<p></p>')
+    .trim()
+    .toLowerCase();
+};
+
+const cleanHTMLForQuill = (html: string): string => {
+  if (!html) return '';
+  return html
+    .replace(/>\s+</g, '><')
+    .trim();
+};
+
 export default function App() {
   // State Constants
   const [activeTab, setActiveTab] = useState<'word' | 'html'>('word');
@@ -360,7 +378,12 @@ export default function App() {
 
       setTimeout(() => {
         if (quillRef.current) {
-          quillRef.current.root.innerHTML = finalContent;
+          const cleaned = cleanHTMLForQuill(finalContent);
+          const currentNorm = normalizeHTML(quillRef.current.root.innerHTML);
+          const newNorm = normalizeHTML(cleaned);
+          if (currentNorm !== newNorm) {
+            quillRef.current.root.innerHTML = cleaned;
+          }
         }
       }, 50);
     }
@@ -1362,7 +1385,12 @@ export default function App() {
                       const htmlVal = textareaRef.current.value;
                       setDocumentHtml(htmlVal);
                       if (quillRef.current) {
-                        quillRef.current.root.innerHTML = htmlVal;
+                        const cleaned = cleanHTMLForQuill(htmlVal);
+                        const currentNorm = normalizeHTML(quillRef.current.root.innerHTML);
+                        const newNorm = normalizeHTML(cleaned);
+                        if (currentNorm !== newNorm) {
+                          quillRef.current.root.innerHTML = cleaned;
+                        }
                       }
                     } else {
                       // Formatting before entering inline editor
@@ -1418,11 +1446,11 @@ export default function App() {
               )}
 
               {/* Editable Area */}
-              <div className="flex-grow p-10 overflow-hidden relative bg-white" id="wysiwyg-box-view">
+              <div className="flex-grow p-4 md:p-6 relative bg-white" id="wysiwyg-box-view">
                 <div
                   ref={editorRef}
                   id="editable-html-wysiwyg"
-                  className={`editor-content max-w-3xl mx-auto min-h-[420px] max-h-[700px] overflow-y-auto outline-none ${showInlineSource ? 'hidden' : 'block'}`}
+                  className={`editor-content w-full min-h-[420px] outline-none ${showInlineSource ? 'hidden' : 'block'}`}
                   dir={direction.toLowerCase()}
                   style={{ textAlign: direction === 'RTL' ? 'right' : 'left' }}
                 />
@@ -1434,7 +1462,7 @@ export default function App() {
                       setDocumentHtml(e.target.value);
                       calculateCounters(e.target.value);
                     }}
-                    className="w-full font-mono text-xs leading-6 p-4 min-h-[420px] max-h-[700px] bg-[#272822] text-[#f8f8f2] outline-none border border-gray-300 rounded-md block resize-y overflow-auto font-medium"
+                    className="w-full font-mono text-xs leading-6 p-4 min-h-[420px] bg-[#272822] text-[#f8f8f2] outline-none border border-gray-300 rounded-md block resize-y overflow-auto font-medium"
                     value={documentHtml}
                     placeholder="Enter raw HTML codes here..."
                   />

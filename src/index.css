@@ -9,8 +9,6 @@
 
 .ql-editor {
   min-height: 420px;
-  max-height: 700px;
-  overflow-y: auto;
   padding: 0 !important;
   font-family: inherit !important;
   font-size: inherit !important;
