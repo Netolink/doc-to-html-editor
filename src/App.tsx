@@ -37,7 +37,7 @@ export default function App() {
   const [activeTab, setActiveTab] = useState<'word' | 'html'>('word');
   const [documentHtml, setDocumentHtml] = useState<string>(
     `<h1 id="init-heading">Welcome to the Netolink Doc to HTML Editor!</h1>
-<p>Write your document here or paste it directly from <strong>Microsoft Word</strong> or <strong>Google Docs</strong>. All formatting, headers, list structures, links, and tables will be preserved and converted instantly.</p>
+<p>Write your document here or paste it directly from <strong>Word documents</strong> or <strong>Google Docs</strong>. All formatting, headers, list structures, links, and tables will be preserved and converted instantly.</p>
 <ul>
   <li>Use the full formatting toolbar at the top to modify text.</li>
   <li>Right-click on table elements to access cell/table utilities.</li>
@@ -226,7 +226,7 @@ export default function App() {
       // Initialize Quill
       const quill = new Quill(editorRef.current, {
         theme: 'snow',
-        placeholder: 'Write your document here or paste it directly from Microsoft Word or Google Docs...',
+        placeholder: 'Write your document here or paste it directly from Word or Google Docs...',
         modules: {
           toolbar: false, // Programmatic toolbar buttons
           table: true,    // Native table module activation
@@ -1104,7 +1104,7 @@ export default function App() {
                 }`}
               >
                 <FileText className="w-4 h-4" />
-                Word
+                Doc
               </button>
               <button
                 id="html-tab-toggle"
@@ -1129,9 +1129,11 @@ export default function App() {
         {/* Dynamic Display Panel Groups */}
         <div id="main-editor-container-panels" className="flex flex-col bg-white rounded-b-xl rounded-tr-xl border border-[#dee2e6] shadow-sm overflow-hidden min-h-[500px] relative">
           
-          {/* TAB 1: WORD EDITOR */}
-          {activeTab === 'word' && (
-            <div id="tab-word-panel-content" className="flex flex-col flex-grow">
+          {/* TAB 1: DOC EDITOR */}
+          <div 
+            id="tab-word-panel-content" 
+            className={`flex flex-col flex-grow ${activeTab === 'word' ? '' : 'hidden'}`}
+          >
               
               {/* Rich Text Custom Toolbar */}
               <div id="rich-toolbar-dock" className="bg-[#f8f9fa] border-b border-[#dee2e6] p-2 flex flex-wrap gap-1 items-center select-none text-gray-700">
@@ -1392,11 +1394,12 @@ export default function App() {
               </footer>
 
             </div>
-          )}
-
+          
           {/* TAB 2: HTML SOURCES CODE EDITOR */}
-          {activeTab === 'html' && (
-            <div id="tab-html-panel-content" className="flex flex-col flex-grow">
+          <div 
+            id="tab-html-panel-content" 
+            className={`flex flex-col flex-grow ${activeTab === 'html' ? '' : 'hidden'}`}
+          >
               
               {/* Output Option Header Row */}
               <div className="flex justify-between items-center bg-[#f8f9fa] border-b border-[#dee2e6] p-4 flex-wrap gap-3">
@@ -1638,9 +1641,9 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* 4. MS Word */}
+                        {/* 4. MS Office */}
                         <div>
-                          <p className="font-bold text-gray-500 mb-2 bg-gray-50 py-1 px-2 rounded text-[10px] uppercase tracking-wide">Microsoft Word cleanup</p>
+                          <p className="font-bold text-gray-500 mb-2 bg-gray-50 py-1 px-2 rounded text-[10px] uppercase tracking-wide">Microsoft Office cleanup</p>
                           <div className="grid grid-cols-1 gap-2 pl-1">
                             <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
                               <input 
@@ -1875,7 +1878,6 @@ export default function App() {
               </div>
 
             </div>
-          )}
 
         </div>
 
