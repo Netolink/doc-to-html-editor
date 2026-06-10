@@ -1,7 +1,5 @@
 import { useState, useEffect, useRef, MouseEvent } from 'react';
 import { 
-  Undo, 
-  Redo, 
   Trash2, 
   Bold, 
   Italic, 
@@ -29,8 +27,64 @@ import {
   Flame, 
   Grid,
   Sparkles,
-  RefreshCw
+  RefreshCw,
+  HelpCircle,
+  X
 } from 'lucide-react';
+
+const formatHTML = (html: string): string => {
+  if (!html) return '';
+  let formatted = '';
+  let indent = 0;
+  const tab = '  ';
+
+  // These tags are block elements that we want on their own lines
+  const blockTags = ['h1', 'h2', 'h3', 'h4', 'h5', 'h6', 'p', 'div', 'blockquote', 'pre', 'ul', 'ol', 'li', 'table', 'thead', 'tbody', 'tfoot', 'tr', 'th', 'td', 'hr', 'br'];
+
+  let processed = html;
+  
+  // Clean up any existing formatting spaces/newlines between elements
+  processed = processed.replace(/>\s+</g, '><');
+
+  // Insert markers to split block elements
+  blockTags.forEach(tag => {
+    // Opening tag
+    const openRegex = new RegExp(`(<${tag}(?:\\s+[^>]*)?>)`, 'gi');
+    processed = processed.replace(openRegex, '\n$1');
+    // Closing tag
+    const closeRegex = new RegExp(`(</${tag}>)`, 'gi');
+    processed = processed.replace(closeRegex, '$1\n');
+  });
+
+  // Also format <hr> and self-closing tags
+  processed = processed.replace(/(<hr[^>]*>)/gi, '\n$1\n');
+  processed = processed.replace(/(<br[^>]*>)/gi, '$1\n');
+
+  // Split lines
+  const lines = processed.split('\n');
+  
+  lines.forEach(line => {
+    const trimmed = line.trim();
+    if (!trimmed) return;
+
+    // Check if it's a closing Tag only (e.g. </p> or </li> or </ul>)
+    const isClosingOnly = trimmed.startsWith('</');
+    const isOpeningOnly = trimmed.startsWith('<') && !trimmed.startsWith('</') && !trimmed.endsWith('/>') && !trimmed.includes('</') && !trimmed.match(/^<(br|hr|img|input)/i);
+
+    if (isClosingOnly) {
+      indent = Math.max(0, indent - 1);
+    }
+
+    const currentIndent = tab.repeat(indent);
+    formatted += currentIndent + trimmed + '\n';
+
+    if (isOpeningOnly) {
+      indent += 1;
+    }
+  });
+
+  return formatted.trim();
+};
 
 export default function App() {
   // State Constants
@@ -126,6 +180,7 @@ export default function App() {
   // UI Toast indicators
   const [toastText, setToastText] = useState<string>('');
   const [showToast, setShowToast] = useState<boolean>(false);
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState<boolean>(false);
 
   // Refs
   const editorRef = useRef<HTMLDivElement>(null);
@@ -283,16 +338,15 @@ export default function App() {
       let finalContent = documentHtml;
       if (showInlineSource && textareaRef.current) {
         finalContent = textareaRef.current.value;
-        setDocumentHtml(finalContent);
       } else if (quillRef.current) {
         finalContent = quillRef.current.root.innerHTML;
-        setDocumentHtml(finalContent);
       } else if (editorRef.current) {
         finalContent = editorRef.current.innerHTML;
-        setDocumentHtml(finalContent);
       }
       
-      calculateCounters(finalContent);
+      const formattedHTML = formatHTML(finalContent);
+      setDocumentHtml(formattedHTML);
+      calculateCounters(formattedHTML);
       setActiveTab(tab);
     } else {
       // Sync from HTML Tab back to WYSIWYG
@@ -312,27 +366,6 @@ export default function App() {
     }
   };
 
-  // Native Undo/Redo operations
-  const handleUndo = () => {
-    if (quillRef.current) {
-      quillRef.current.focus();
-      const hist = quillRef.current.history || quillRef.current.getModule('history');
-      if (hist) {
-        hist.undo();
-      }
-    }
-  };
-
-  const handleRedo = () => {
-    if (quillRef.current) {
-      quillRef.current.focus();
-      const hist = quillRef.current.history || quillRef.current.getModule('history');
-      if (hist) {
-        hist.redo();
-      }
-    }
-  };
-
   // Standard WYSIWYG command executive targeting Quill API
   const executeCommand = (command: string, arg: string = '') => {
     if (!quillRef.current) return;
@@ -344,16 +377,6 @@ export default function App() {
     const formats = quill.getFormat();
 
     switch (command.toLowerCase()) {
-      case 'undo': {
-        const hist = quill.history || quill.getModule('history');
-        if (hist) hist.undo();
-        break;
-      }
-      case 'redo': {
-        const hist = quill.history || quill.getModule('history');
-        if (hist) hist.redo();
-        break;
-      }
       case 'bold':
         quill.format('bold', !formats.bold);
         break;
@@ -1024,7 +1047,8 @@ export default function App() {
     }
 
     const finalResult = outputHtml.trim();
-    setDocumentHtml(finalResult);
+    const formattedResult = formatHTML(finalResult);
+    setDocumentHtml(formattedResult);
     if (quillRef.current) {
       quillRef.current.root.innerHTML = finalResult;
     }
@@ -1163,14 +1187,7 @@ export default function App() {
               {/* Rich Text Custom Toolbar */}
               <div id="rich-toolbar-dock" className="bg-[#f8f9fa] border-b border-[#dee2e6] p-2 flex flex-wrap gap-1 items-center select-none text-gray-700">
                 
-                {/* Undo / Redo */}
-                <button type="button" onClick={handleUndo} title="Undo" className="p-1.5 rounded hover:bg-gray-200 text-gray-700">
-                  <Undo className="w-4 h-4 stroke-[2.5]" />
-                </button>
-                <button type="button" onClick={handleRedo} title="Redo" className="p-1.5 rounded hover:bg-gray-200 text-gray-700">
-                  <Redo className="w-4 h-4 stroke-[2.5]" />
-                </button>
-                <div className="h-5 w-[1px] bg-gray-300 mx-1"></div>
+
 
                 {/* Clear Formatting */}
                 <button type="button" onClick={clearFormatting} title="Clear Formatting (Selection)" className="p-1.5 rounded hover:bg-gray-200 text-red-600">
@@ -1324,6 +1341,17 @@ export default function App() {
                   Find/Replace
                 </button>
 
+                {/* Keyboard Shortcuts Help button */}
+                <button 
+                  type="button" 
+                  onClick={() => setShowShortcutsHelp(true)}
+                  className="px-2.5 py-1.5 bg-white border border-gray-300 hover:bg-gray-100 font-semibold rounded text-gray-700 text-xs flex items-center gap-1 shadow-sm transition"
+                  title="Keyboard Shortcuts Help"
+                >
+                  <HelpCircle className="w-3.5 h-3.5 text-[#2c7be5]" />
+                  <span>Keys</span>
+                </button>
+
                 {/* Inline HTML Source toggle */}
                 <button
                   type="button"
@@ -1336,6 +1364,11 @@ export default function App() {
                       if (quillRef.current) {
                         quillRef.current.root.innerHTML = htmlVal;
                       }
+                    } else {
+                      // Formatting before entering inline editor
+                      const currentVal = quillRef.current ? quillRef.current.root.innerHTML : documentHtml;
+                      const formatted = formatHTML(currentVal);
+                      setDocumentHtml(formatted);
                     }
                     setShowInlineSource(!showInlineSource);
                   }}
@@ -1397,9 +1430,12 @@ export default function App() {
                 {showInlineSource && (
                   <textarea
                     ref={textareaRef}
-                    onChange={(e) => setDocumentHtml(e.target.value)}
+                    onChange={(e) => {
+                      setDocumentHtml(e.target.value);
+                      calculateCounters(e.target.value);
+                    }}
                     className="w-full font-mono text-xs leading-6 p-4 min-h-[420px] max-h-[700px] bg-[#272822] text-[#f8f8f2] outline-none border border-gray-300 rounded-md block resize-y overflow-auto font-medium"
-                    defaultValue={documentHtml}
+                    value={documentHtml}
                     placeholder="Enter raw HTML codes here..."
                   />
                 )}
@@ -1973,6 +2009,78 @@ export default function App() {
           <button onClick={() => runTableAction('deleteColumn')} className="w-full text-left px-3 py-1.5 hover:bg-red-50 hover:text-red-600 flex items-center gap-1.5 border-b border-gray-100 transition cursor-pointer">Delete Column</button>
           <button onClick={() => runTableAction('mergeCells')} className="w-full text-left px-3 py-1.5 hover:bg-[#e2effe] hover:text-[#2c7be5] flex items-center gap-1.5 transition cursor-pointer">Merge Cells (Span Column)</button>
           <button onClick={() => runTableAction('splitCell')} className="w-full text-left px-3 py-1.5 hover:bg-[#e2effe] hover:text-[#2c7be5] flex items-center gap-1.5 transition cursor-pointer">Split / Reset cell</button>
+        </div>
+      )}
+
+      {/* Keyboard Shortcuts Help Modal */}
+      {showShortcutsHelp && (
+        <div 
+          id="shortcuts-help-modal" 
+          className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-50 flex items-center justify-center p-4 transition-all duration-300"
+          onClick={() => setShowShortcutsHelp(false)}
+        >
+          <div 
+            className="bg-white rounded-xl shadow-2xl max-w-md w-full border border-gray-100 overflow-hidden transform scale-100 transition-all"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div className="px-5 py-4 border-b border-sidebar bg-slate-50/50 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <HelpCircle className="w-5 h-5 text-[#2c7be5]" />
+                <h3 className="font-bold text-gray-805 text-sm">Keyboard Shortcuts</h3>
+              </div>
+              <button 
+                type="button"
+                onClick={() => setShowShortcutsHelp(false)}
+                className="p-1 rounded-md text-gray-400 hover:text-gray-600 hover:bg-gray-100 transition"
+                title="Close"
+              >
+                <X className="w-4 h-4" />
+              </button>
+            </div>
+            
+            <div className="p-5 space-y-3.5">
+              <p className="text-xs text-gray-500 mb-1">
+                Maximize editing efficiency with these instant editor controls:
+              </p>
+              
+              <div className="grid grid-cols-1 gap-2">
+                {[
+                  { keys: ['Ctrl', 'Z'], desc: 'Undo last change' },
+                  { keys: ['Ctrl', 'Y'], desc: 'Redo undone change' },
+                  { keys: ['Ctrl', 'B'], desc: 'Toggle bold' },
+                  { keys: ['Ctrl', 'I'], desc: 'Toggle italic' },
+                  { keys: ['Ctrl', 'U'], desc: 'Toggle underline' },
+                  { keys: ['Ctrl', 'K'], desc: 'Insert hyperlink' },
+                  { keys: ['Ctrl', 'H'], desc: 'Open Find & Replace' },
+                  { keys: ['Ctrl', 'A'], desc: 'Select all content' }
+                ].map((item, idx) => (
+                  <div key={idx} className="flex items-center justify-between py-1.5 border-b border-gray-50 last:border-0 hover:bg-gray-50/50 px-1 rounded transition">
+                    <span className="text-xs text-gray-600 font-medium">{item.desc}</span>
+                    <div className="flex items-center gap-1.5 select-none text-[10px] font-semibold text-gray-750">
+                      {item.keys.map((k, kIdx) => (
+                        <kbd 
+                          key={kIdx} 
+                          className="bg-slate-100 text-slate-800 text-[10px] px-2 py-0.5 rounded border border-slate-250 shadow-sm"
+                        >
+                          {k}
+                        </kbd>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+            
+            <div className="px-5 py-3 bg-gray-50 border-t border-gray-100 flex justify-end">
+              <button 
+                type="button"
+                onClick={() => setShowShortcutsHelp(false)}
+                className="px-4 py-1.5 bg-[#2c7be5] hover:bg-blue-600 text-white rounded font-bold text-xs transition shadow-sm"
+              >
+                Got It
+              </button>
+            </div>
+          </div>
         </div>
       )}
 
