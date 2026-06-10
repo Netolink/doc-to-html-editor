@@ -932,6 +932,47 @@ export default function App() {
       });
     }
 
+    // Quill-specific improvements: remove all ql-ui elements entirely,
+    // convert list nodes to standard ul/ol structure with li tags,
+    // and remove all data-list attributes.
+    body.querySelectorAll('span.ql-ui').forEach(el => el.remove());
+
+    body.querySelectorAll('li[data-list]').forEach(li => {
+      const listType = li.getAttribute('data-list'); // 'ordered' or 'bullet'
+      const parent = li.parentNode as HTMLElement;
+      const parentTag = parent?.tagName.toLowerCase();
+      const correctParentTag = listType === 'ordered' ? 'ol' : 'ul';
+      
+      if (!parent || parentTag !== correctParentTag) {
+        if (parent && (parentTag === 'ol' || parentTag === 'ul')) {
+          const listContainer = document.createElement(correctParentTag);
+          parent.parentNode?.insertBefore(listContainer, parent);
+          listContainer.appendChild(li);
+        } else {
+          const listContainer = document.createElement(correctParentTag);
+          li.parentNode?.insertBefore(listContainer, li);
+          listContainer.appendChild(li);
+        }
+      }
+    });
+
+    body.querySelectorAll('ol, ul').forEach(list => {
+      let next = list.nextSibling;
+      while (next && next.nodeType === 1 && (next as HTMLElement).tagName.toLowerCase() === list.tagName.toLowerCase()) {
+        const nextList = next as HTMLElement;
+        while (nextList.firstChild) {
+          list.appendChild(nextList.firstChild);
+        }
+        const toRemove = nextList;
+        next = nextList.nextSibling;
+        toRemove.remove();
+      }
+    });
+
+    body.querySelectorAll('[data-list]').forEach(el => {
+      el.removeAttribute('data-list');
+    });
+
     // Traverse recursively
     const traverseElementNode = (node: Node | null) => {
       if (!node) return;
@@ -1149,10 +1190,23 @@ export default function App() {
     }
 
     const finalResult = outputHtml.trim();
-    const formattedResult = formatHTML(finalResult);
-    setDocumentHtml(formattedResult);
     if (quillRef.current) {
       quillRef.current.clipboard.dangerouslyPasteHTML(finalResult);
+      // Retrieve the parsed and normalized clean HTML back from Quill
+      const syncedHtml = quillRef.current.root.innerHTML;
+      const formattedResult = formatHTML(syncedHtml);
+      setDocumentHtml(formattedResult);
+      calculateCounters(formattedResult);
+      if (htmlTextareaRef.current) {
+        htmlTextareaRef.current.value = formattedResult;
+      }
+    } else {
+      const formattedResult = formatHTML(finalResult);
+      setDocumentHtml(formattedResult);
+      calculateCounters(formattedResult);
+      if (htmlTextareaRef.current) {
+        htmlTextareaRef.current.value = formattedResult;
+      }
     }
     setHasCleanedHistory(true);
     setShowCleanOptions(false);
@@ -1161,9 +1215,20 @@ export default function App() {
 
   const undoHtmlClean = () => {
     if (!hasCleanedHistory) return;
-    setDocumentHtml(originalBeforeClean);
     if (quillRef.current) {
       quillRef.current.clipboard.dangerouslyPasteHTML(originalBeforeClean);
+      const syncedHtml = quillRef.current.root.innerHTML;
+      const formattedResult = formatHTML(syncedHtml);
+      setDocumentHtml(formattedResult);
+      if (htmlTextareaRef.current) {
+        htmlTextareaRef.current.value = formattedResult;
+      }
+    } else {
+      const formattedResult = formatHTML(originalBeforeClean);
+      setDocumentHtml(formattedResult);
+      if (htmlTextareaRef.current) {
+        htmlTextareaRef.current.value = formattedResult;
+      }
     }
     setHasCleanedHistory(false);
     triggerToast("Undone last cleaning filters!");
