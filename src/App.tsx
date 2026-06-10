@@ -1152,7 +1152,7 @@ export default function App() {
     const formattedResult = formatHTML(finalResult);
     setDocumentHtml(formattedResult);
     if (quillRef.current) {
-      quillRef.current.root.innerHTML = finalResult;
+      quillRef.current.clipboard.dangerouslyPasteHTML(finalResult);
     }
     setHasCleanedHistory(true);
     setShowCleanOptions(false);
@@ -1163,7 +1163,7 @@ export default function App() {
     if (!hasCleanedHistory) return;
     setDocumentHtml(originalBeforeClean);
     if (quillRef.current) {
-      quillRef.current.root.innerHTML = originalBeforeClean;
+      quillRef.current.clipboard.dangerouslyPasteHTML(originalBeforeClean);
     }
     setHasCleanedHistory(false);
     triggerToast("Undone last cleaning filters!");
