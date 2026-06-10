@@ -1,0 +1,6 @@
+{
+  "name": "Doc to HTML Editor",
+  "description": "Convert rich text and documents to clean, semantic HTML with customized cleaning options.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

@@ -1,0 +1,1688 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Doc to HTML Editor (Netolink)</title>
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <!-- Tailwind CSS CDN -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          fontFamily: {
+            sans: ['Inter', '-apple-system', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace'],
+          },
+          colors: {
+            primary: {
+              DEFAULT: '#2c7be5',
+              hover: '#1b5eb8',
+              light: '#f0f6ff',
+            }
+          },
+          boxShadow: {
+            subtle: '0 1px 3px rgba(0,0,0,0.08)',
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    /* Custom Scrollbar */
+    ::-webkit-scrollbar {
+      width: 8px;
+      height: 8px;
+    }
+    ::-webkit-scrollbar-track {
+      background: #f1f1f1;
+    }
+    ::-webkit-scrollbar-thumb {
+      background: #c1c1c1;
+      border-radius: 4px;
+    }
+    ::-webkit-scrollbar-thumb:hover {
+      background: #a8a8a8;
+    }
+    
+    /* WYSIWYG Content Styling */
+    .editor-content {
+      outline: none;
+      font-family: 'Inter', -apple-system, sans-serif;
+    }
+    .editor-content p {
+      margin-bottom: 0.75rem;
+      line-height: 1.6;
+    }
+    .editor-content h1 {
+      font-size: 1.875rem;
+      font-weight: 700;
+      margin-top: 1.5rem;
+      margin-bottom: 0.75rem;
+      line-height: 1.25;
+    }
+    .editor-content h2 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      margin-top: 1.25rem;
+      margin-bottom: 0.5rem;
+      line-height: 1.3;
+    }
+    .editor-content h3 {
+      font-size: 1.25rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    .editor-content h4 {
+      font-size: 1.125rem;
+      font-weight: 600;
+      margin-top: 1rem;
+      margin-bottom: 0.5rem;
+    }
+    .editor-content blockquote {
+      border-left: 4px solid #dee2e6;
+      padding-left: 1rem;
+      color: #6c757d;
+      font-style: italic;
+      margin: 1rem 0;
+    }
+    .editor-content pre {
+      background-color: #f8f9fa;
+      border: 1px solid #dee2e6;
+      border-radius: 4px;
+      padding: 0.75rem;
+      font-family: 'JetBrains Mono', monospace;
+      font-size: 0.875rem;
+      overflow-x: auto;
+      margin: 1rem 0;
+    }
+    .editor-content ul {
+      list-style-type: disc;
+      padding-left: 2rem;
+      margin-bottom: 0.75rem;
+    }
+    .editor-content ol {
+      list-style-type: decimal;
+      padding-left: 2rem;
+      margin-bottom: 0.75rem;
+    }
+    .editor-content img {
+      max-width: 100%;
+      height: auto;
+      display: inline-block;
+      margin: 0.5rem 0;
+    }
+    .editor-content a {
+      color: #2c7be5;
+      text-decoration: underline;
+    }
+    .editor-content table {
+      border-collapse: collapse;
+      width: 100%;
+      margin: 1.5rem 0;
+    }
+    .editor-content table th, 
+    .editor-content table td {
+      border: 1px solid #dee2e6;
+      padding: 0.5rem 0.75rem;
+      min-width: 50px;
+    }
+    .editor-content table th {
+      background-color: #f8f9fa;
+      font-weight: 600;
+      text-align: left;
+    }
+    
+    /* Code highlight styling */
+    .html-keyword { color: #005cc5; }
+    .html-tag { color: #22863a; }
+    .html-attr { color: #6f42c1; }
+    .html-val { color: #032f62; }
+    .html-comment { color: #ccc; font-style: italic; }
+  </style>
+</head>
+<body class="bg-[#f5f5f5] text-[#333] font-sans min-h-screen py-8 px-4">
+
+  <!-- Main Container -->
+  <div class="max-w-[1100px] mx-auto">
+    
+    <!-- Header -->
+    <header class="mb-4 flex items-center justify-between">
+      <div>
+        <h1 class="text-2xl font-bold flex items-center gap-2 text-slate-800">
+          <!-- Logo Icon -->
+          <svg class="w-6 h-6 text-primary" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>
+          </svg>
+          Doc to HTML Editor
+        </h1>
+        <p class="text-sm text-slate-500 mt-0.5">Write or paste your doc, clean the HTML code, and export instantly</p>
+      </div>
+      <div>
+        <!-- Language indicator -->
+        <span class="text-xs bg-slate-200 text-slate-700 px-2 py-1 rounded-full font-medium shadow-none">English UI (LTR)</span>
+      </div>
+    </header>
+
+    <!-- Folder-style Tab Bar -->
+    <div class="flex items-end justify-between border-b border-[#dee2e6]">
+      <div class="flex gap-1">
+        <!-- Word Tab Button -->
+        <button id="tab-word-btn" onclick="switchTab('word')" class="px-6 py-3 font-semibold rounded-t-lg transition-all duration-150 flex items-center gap-2 border-t-2 border-transparent bg-white border-x border-t border-b-white text-primary z-10 translate-y-[1px]">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
+          </svg>
+          Word Editor
+        </button>
+        <!-- HTML Tab Button -->
+        <button id="tab-html-btn" onclick="switchTab('html')" class="px-6 py-3 font-semibold rounded-t-lg transition-all duration-150 flex items-center gap-2 text-slate-600 bg-slate-100 hover:bg-slate-200 border-x border-t border-transparent translate-y-[1px]">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M10 20l4-16m4 4l4 4-4 4M6 16l-4-4 4-4"></path>
+          </svg>
+          HTML Code
+        </button>
+      </div>
+
+      <!-- Live Cleaning Indicator/Summary -->
+      <div class="mb-2 text-xs text-slate-500 flex items-center gap-2">
+        <span id="char-word-counts-summary" class="hidden sm:inline font-mono">0 chars | 0 words</span>
+      </div>
+    </div>
+
+    <!-- Main Container Panel -->
+    <div id="editor-panel-group" class="bg-white border-x border-b border-[#dee2e6] rounded-b-lg p-5 shadow-subtle min-h-[550px] relative">
+      
+      <!-- TAB 1: WORD EDITOR -->
+      <div id="tab-word" class="block space-y-3">
+        <!-- Toolbar -->
+        <div id="rich-toolbar" class="bg-[#f8f9fa] border border-[#dee2e6] p-2 rounded-md flex flex-wrap gap-1 items-center select-none text-slate-700">
+          <!-- Undo / Redo -->
+          <button type="button" onclick="execCmd('undo')" title="Undo" class="p-1.5 rounded hover:bg-slate-200 text-slate-700">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3"></path></svg>
+          </button>
+          <button type="button" onclick="execCmd('redo')" title="Redo" class="p-1.5 rounded hover:bg-slate-200 text-slate-700">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l6-6m0 0l-6-6m6 6H9a6 6 0 000 12h3"></path></svg>
+          </button>
+          <div class="h-5 w-[1px] bg-slate-300 mx-1"></div>
+
+          <!-- Clear Formatting -->
+          <button type="button" onclick="clearFormatting()" title="Clear Formatting (Selection)" class="p-1.5 rounded hover:bg-slate-200 text-red-600 font-bold flex items-center justify-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+          </button>
+          <div class="h-5 w-[1px] bg-slate-300 mx-1"></div>
+
+          <!-- Formatting Dropdown -->
+          <select id="format-block" onchange="execCmd('formatBlock', this.value); this.selectedIndex=0;" class="p-1 text-xs border border-slate-300 rounded bg-white hover:border-slate-400">
+            <option value="">Format...</option>
+            <option value="P">Paragraph</option>
+            <option value="H1">Heading 1</option>
+            <option value="H2">Heading 2</option>
+            <option value="H3">Heading 3</option>
+            <option value="H4">Heading 4</option>
+            <option value="BLOCKQUOTE">Blockquote</option>
+            <option value="PRE">Code Block</option>
+          </select>
+          <div class="h-5 w-[1px] bg-slate-300 mx-1"></div>
+
+          <!-- Text Styles -->
+          <button type="button" onclick="execCmd('bold')" title="Bold (Ctrl+B)" class="p-1.5 rounded hover:bg-slate-200 font-bold">B</button>
+          <button type="button" onclick="execCmd('italic')" title="Italic (Ctrl+I)" class="p-1.5 rounded hover:bg-slate-200 italic">I</button>
+          <button type="button" onclick="execCmd('underline')" title="Underline (Ctrl+U)" class="p-1.5 rounded hover:bg-slate-200 underline">U</button>
+          <button type="button" onclick="execCmd('strikeThrough')" title="Strikethrough" class="p-1.5 rounded hover:bg-slate-200 line-through">S</button>
+          <div class="h-5 w-[1px] bg-slate-300 mx-1"></div>
+
+          <!-- Alignment -->
+          <button type="button" onclick="execCmd('justifyLeft')" title="Align Left" class="p-1.5 rounded hover:bg-slate-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h10M4 18h16"></path></svg>
+          </button>
+          <button type="button" onclick="execCmd('justifyCenter')" title="Align Center" class="p-1.5 rounded hover:bg-slate-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M7 12h10M4 18h16"></path></svg>
+          </button>
+          <button type="button" onclick="execCmd('justifyRight')" title="Align Right" class="p-1.5 rounded hover:bg-slate-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M10 12h10M4 18h16"></path></svg>
+          </button>
+          <button type="button" onclick="execCmd('justifyFull')" title="Justify" class="p-1.5 rounded hover:bg-slate-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+          </button>
+          <div class="h-5 w-[1px] bg-slate-300 mx-1"></div>
+
+          <!-- Lists -->
+          <button type="button" onclick="execCmd('insertUnorderedList')" title="Bullet List" class="p-1.5 rounded hover:bg-slate-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16M4 6h.01M4 12h.01M4 18h.01"></path></svg>
+          </button>
+          <button type="button" onclick="execCmd('insertOrderedList')" title="Numbered List" class="p-1.5 rounded hover:bg-slate-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16M4 6h.01M4 12h.01M4 18h.01"></path></svg>
+          </button>
+          <button type="button" onclick="execCmd('outdent')" title="Outdent" class="p-1.5 rounded hover:bg-slate-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7M8 12h12"></path></svg>
+          </button>
+          <button type="button" onclick="execCmd('indent')" title="Indent" class="p-1.5 rounded hover:bg-slate-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7M16 12H4"></path></svg>
+          </button>
+          <div class="h-5 w-[1px] bg-slate-300 mx-1"></div>
+
+          <!-- Link / Unlink -->
+          <button type="button" onclick="promptLink()" title="Insert Link" class="p-1.5 rounded hover:bg-slate-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M13.828 10.172a4 4 0 00-5.656 0l-4 4a4 4 0 105.656 5.656l1.102-1.101m-.758-4.899a4 4 0 005.656 0l4-4a4 4 0 00-5.656-5.656l-1.1 1.1"></path></svg>
+          </button>
+          <button type="button" onclick="execCmd('unlink')" title="Remove Link" class="p-1.5 rounded hover:bg-slate-200">
+            <svg class="w-4 h-4" class="opacity-70" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636"></path></svg>
+          </button>
+          <button type="button" onclick="promptImage()" title="Insert Image URL" class="p-1.5 rounded hover:bg-slate-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16l4.586-4.586a1 1 0 011.414 0L16 17m0 10l.586-4.586a1 1 0 011.414 0L20 18M9 11h.01M4 21C2.895 21 2 20.105 2 19V5C2 3.895 2.895 3 4 3H20c1.105 0 2 .895 2 2v14c0 1.105-.895 2-2 2H4z"></path></svg>
+          </button>
+          <div class="h-5 w-[1px] bg-slate-300 mx-1"></div>
+
+          <!-- Color Pickers -->
+          <div class="relative group flex items-center">
+            <span class="text-[10px] text-slate-500 font-bold mr-1">Text</span>
+            <input type="color" onchange="execCmd('foreColor', this.value)" title="Text Color" class="w-5 h-5 p-0 border-0 cursor-pointer rounded">
+          </div>
+          <div class="relative group flex items-center ml-2">
+            <span class="text-[10px] text-slate-500 font-bold mr-1">Bg</span>
+            <input type="color" onchange="execCmd('hiliteColor', this.value)" title="Highlight Color" class="w-5 h-5 p-0 border-0 cursor-pointer rounded">
+          </div>
+          <div class="h-5 w-[1px] bg-slate-300 mx-1"></div>
+
+          <!-- Insert Table -->
+          <div class="relative inline-block">
+            <button type="button" id="insert-table-btn" onclick="toggleTablePicker()" title="Insert Table Grid" class="p-1.5 rounded hover:bg-slate-200 flex items-center gap-0.5">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M3 10h18M3 14h18m-9-4v8m-7 0h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+              <span class="text-xs">&#9662;</span>
+            </button>
+            <!-- Table picker popup -->
+            <div id="table-picker-popup" class="hidden absolute left-0 mt-1 bg-white p-3 border border-slate-300 shadow-lg rounded-md z-40 w-48">
+              <p class="text-xs text-slate-500 mb-2 font-semibold text-center select-none" id="table-picker-label">0 × 0 Table</p>
+              <div class="grid grid-cols-10 gap-[2px] cursor-pointer" onmouseleave="resetTablePicker()">
+                <!-- Grid square elements generated by JS -->
+                <script>
+                  for(let r=1; r<=8; r++) {
+                    for(let c=1; c<=8; c++) {
+                      document.write(`<div data-row="${r}" data-col="${c}" onmouseover="hoverTablePicker(${r},${c})" onclick="createTable(${r},${c})" class="w-3.5 h-3.5 border border-slate-200 rounded-[1px] bg-white transition-colors duration-75"></div>`);
+                    }
+                  }
+                </script>
+              </div>
+            </div>
+          </div>
+          <div class="h-5 w-[1px] bg-slate-300 mx-1"></div>
+
+          <!-- Horizontal rule / Print -->
+          <button type="button" onclick="execCmd('insertHorizontalRule')" title="Insert Horizontal Rule" class="p-1.5 rounded hover:bg-slate-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 12h14"></path></svg>
+          </button>
+          <button type="button" onclick="window.print()" title="Print Area" class="p-1.5 rounded hover:bg-slate-200">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z"></path></svg>
+          </button>
+          <div class="h-5 w-[1px] bg-slate-300 mx-1"></div>
+
+          <!-- RTL / LTR Manuel toggles -->
+          <div class="flex items-center gap-0.5 bg-slate-200 px-1 rounded-md text-xs">
+            <button type="button" onclick="setWordDirection('ltr')" id="dir-ltr-btn" title="Left-to-Right" class="px-2 py-1 rounded bg-white text-slate-800 font-bold shadow-sm">LTR</button>
+            <button type="button" onclick="setWordDirection('rtl')" id="dir-rtl-btn" title="Right-to-Left" class="px-2 py-1 rounded text-slate-600 font-bold">RTL</button>
+          </div>
+          
+          <div class="grow"></div>
+          
+          <!-- Find & Replace button -->
+          <button type="button" onclick="toggleFindReplace()" title="Find & Replace (Ctrl+H)" class="px-2 py-1 flex items-center gap-1 hover:bg-slate-200 rounded text-xs font-semibold text-primary">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z"></path></svg>
+            Find
+          </button>
+          <!-- Source Code inline toggle -->
+          <button type="button" id="source-toggle-btn" onclick="toggleSourceInWord()" title="Toggle raw code editor within Word view" class="px-2 py-1 border border-slate-300 hover:bg-slate-200 rounded text-xs font-bold transition-all duration-150 flex items-center gap-1 bg-white">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 9l3 3-3 3m5 0h3"></path></svg>
+            <span>&lt;&gt; Code</span>
+          </button>
+        </div>
+
+        <!-- Find & Replace Panel (hidden initially) -->
+        <div id="find-replace-panel" class="hidden bg-slate-50 border border-[#dee2e6] p-3 rounded-md flex flex-wrap gap-2 items-center justify-between text-xs transition duration-150 shadow-inner">
+          <div class="flex flex-wrap gap-2 items-center">
+            <div>
+              <span class="text-slate-500 mr-1 select-none font-medium">Find:</span>
+              <input type="text" id="find-input" placeholder="Search phrase..." class="border border-slate-300 p-1 rounded w-40 outline-none focus:border-primary">
+            </div>
+            <div>
+              <span class="text-slate-500 mr-1 select-none font-medium">Replace with:</span>
+              <input type="text" id="replace-input" placeholder="Replacement Text..." class="border border-slate-300 p-1 rounded w-40 outline-none focus:border-primary">
+            </div>
+            <div class="flex items-center gap-1">
+              <button type="button" onclick="findMatches()" class="px-2.5 py-1 bg-slate-200 hover:bg-slate-300 font-semibold rounded">Find Context</button>
+              <button type="button" onclick="replaceNext()" class="px-2.5 py-1 bg-primary text-white font-semibold rounded hover:bg-primary-hover">Replace Next</button>
+              <button type="button" onclick="replaceAll()" class="px-2.5 py-1 bg-orange-600 text-white font-semibold rounded hover:bg-orange-700">Replace All</button>
+            </div>
+          </div>
+          <button onclick="toggleFindReplace()" class="text-slate-400 hover:text-slate-600 font-bold px-2 py-1 text-sm">&times;</button>
+        </div>
+
+        <!-- Main Editable WYSIWYG Pane -->
+        <div class="relative bg-white border border-[#dee2e6] rounded-md transition-all duration-200 shadow-sm" id="editor-container-shell">
+          <!-- Text wysiwyg area -->
+          <div id="word-editor" contenteditable="true" oninput="onWordInput()" class="editor-content p-5 min-h-[420px] max-h-[700px] overflow-y-auto overflow-x-hidden block resize-y bg-white" placeholder="Start writing or paste documents here...">
+            <h1 id="init-heading">Welcome to the Netolink Doc to HTML Editor!</h1>
+            <p>Write your document here or paste it directly from <strong>Microsoft Word</strong> or <strong>Google Docs</strong>. All formatting, headers, list structures, links, and tables will be preserved and converted instantly.</p>
+            <ul>
+              <li>Use the full formatting toolbar at the top to modify text.</li>
+              <li>Right-click on table elements to access cell/table utilities.</li>
+              <li>Switch to the <strong>HTML Code</strong> tab to clean and optimize code tags using advanced checkboxes!</li>
+            </ul>
+            <p>You can even find & replace phrases with the tool, toggle immediate code inline, or export the resulting clean workspace into `.html` or `.txt` formats instantly.</p>
+          </div>
+          <!-- Textarea (Source inline wrapper) -->
+          <textarea id="word-editor-textarea" oninput="onTextAreaInput(this.value)" class="hidden w-full font-mono text-sm p-4 min-h-[420px] max-h-[700px] bg-[#272822] text-[#f8f8f2] outline-none border-t border-[#dee2e6] rounded-md block resize-y whitespace-pre overflow-auto" placeholder="Edit the raw HTML here..."></textarea>
+        </div>
+
+        <!-- Status & Wordcount bottom bar -->
+        <footer class="flex justify-between items-center text-xs text-slate-500 bg-slate-50 border border-[#dee2e6] p-2.5 rounded-md">
+          <div id="direction-detection-label" class="flex items-center gap-1 select-none">
+            <span class="w-2 h-2 rounded-full bg-emerald-500"></span>
+            Text Direction: <span class="font-bold uppercase text-slate-700 font-mono" id="current-dir-text">LTR</span>
+          </div>
+          <div class="flex gap-4 font-mono select-none" id="word-count-panel">
+            <span>Words: <strong id="word-count-val" class="text-slate-700">0</strong></span>
+            <span>Characters: <strong id="char-count-val" class="text-slate-700">0</strong></span>
+          </div>
+        </footer>
+      </div>
+
+
+      <!-- TAB 2: HTML CODE EDITOR -->
+      <div id="tab-html" class="hidden space-y-4">
+        
+        <!-- Code Toolbar and Prominent Clean Panel Button -->
+        <div class="flex justify-between items-center bg-[#f8f9fa] border border-[#dee2e6] p-2.5 rounded-md text-slate-700">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-semibold px-2 py-1 bg-slate-200 text-slate-700 rounded select-none">HTML Source Output</span>
+            <!-- Undo Clean button -->
+            <button id="undo-clean-btn" onclick="undoClean()" class="hidden px-2 py-1 border border-amber-600 bg-amber-50 hover:bg-amber-100 text-amber-800 text-xs font-semibold rounded shadow-sm transition flex items-center gap-1">
+              <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M12.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0019 16V8a1 1 0 00-1.6-.8l-5.334 4zM4.066 11.2a1 1 0 000 1.6l5.334 4A1 1 0 0011 16V8a1 1 0 00-1.6-.8l-5.334 4z"></path>
+              </svg>
+              Undo last clean
+            </button>
+          </div>
+          <div class="relative">
+            <!-- PROMINENT CLEAN BUTTON -->
+            <button id="clean-panel-toggle-btn" onclick="toggleCleanPanel()" class="px-4 py-2 bg-emerald-600 text-white rounded font-bold hover:bg-emerald-700 transition duration-150 flex items-center gap-1.5 shadow-sm">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5"></path>
+              </svg>
+              Clean HTML Options
+            </button>
+
+            <!-- CLEAN DROPDOWN PANEL -->
+            <div id="clean-options-panel" class="hidden absolute right-0 mt-2 w-[420px] max-w-[calc(100vw-2rem)] bg-white border border-[#dee2e6] rounded-lg shadow-xl p-5 z-50 text-xs space-y-4">
+              <div class="flex justify-between items-center pb-2 border-b border-slate-100">
+                <h3 class="font-bold text-sm text-slate-800 flex items-center gap-1.5">
+                  <svg class="w-4 h-4 text-emerald-600" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"></path></svg>
+                  Clean HTML Options
+                </h3>
+                <span class="text-[10px] text-slate-500 uppercase font-bold bg-slate-100 px-1.5 py-0.5 rounded">Client-Side Filtering</span>
+              </div>
+
+              <div class="max-h-[350px] overflow-y-auto pr-1 space-y-3">
+                <!-- Group 1: Inline styles -->
+                <div>
+                  <h4 class="font-bold text-slate-700 mb-1.5 bg-slate-50 py-1 px-1.5 rounded text-[10px] uppercase">Inline styles & formatting</h4>
+                  <div class="grid grid-cols-1 gap-1.5 pl-1.5">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-all-styles" class="rounded text-primary focus:ring-0"> Remove all style="" attributes
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-font-tags" class="rounded text-primary focus:ring-0"> Remove &lt;font&gt; tags
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-color-attrs" class="rounded text-primary focus:ring-0"> Remove color attributes
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-size-attrs" class="rounded text-primary focus:ring-0"> Remove size attributes
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-fontsize" class="rounded text-primary focus:ring-0"> Remove inline font-size declarations
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-fontfamily" class="rounded text-primary focus:ring-0"> Remove inline font-family declarations
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-bg-styles" class="rounded text-primary focus:ring-0"> Remove background-color styles
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-align-styles" class="rounded text-primary focus:ring-0"> Remove text-align styles
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Group 2: Structural cleanup -->
+                <div>
+                  <h4 class="font-bold text-slate-700 mb-1.5 bg-slate-50 py-1 px-1.5 rounded text-[10px] uppercase">Structural cleanup</h4>
+                  <div class="grid grid-cols-1 gap-1.5 pl-1.5">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-classes" class="rounded text-primary focus:ring-0"> Remove all class="" attributes
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-ids" class="rounded text-primary focus:ring-0"> Remove all id="" attributes
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-data-attrs" class="rounded text-primary focus:ring-0"> Remove all data-* attributes
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-aria-attrs" class="rounded text-primary focus:ring-0"> Remove all aria-* attributes
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-empty-tags" class="rounded text-primary focus:ring-0"> Remove empty tags (e.g. &lt;p&gt;&lt;/p&gt;)
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-br-block" class="rounded text-primary focus:ring-0"> Remove &lt;br&gt; tags inside block elements
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-unwrap-spans" class="rounded text-primary focus:ring-0"> Unwrap &lt;span&gt; tags (keep text)
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-div-wrappers" class="rounded text-primary focus:ring-0"> Remove &lt;div&gt; wrappers
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Group 3: Comments & metadata -->
+                <div>
+                  <h4 class="font-bold text-slate-700 mb-1.5 bg-slate-50 py-1 px-1.5 rounded text-[10px] uppercase">Comments & metadata</h4>
+                  <div class="grid grid-cols-1 gap-1.5 pl-1.5">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-comments" class="rounded text-primary focus:ring-0" checked> Remove HTML comments (&lt;!-- ... --&gt;)
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-meta-tags" class="rounded text-primary focus:ring-0" checked> Remove &lt;meta&gt; tags
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-style-blocks" class="rounded text-primary focus:ring-0" checked> Remove embed &lt;style&gt; blocks
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-scripts" class="rounded text-primary focus:ring-0" checked> Remove &lt;script&gt; code blocks
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Group 4: Microsoft Word specific -->
+                <div>
+                  <h4 class="font-bold text-slate-700 mb-1.5 bg-slate-50 py-1 px-1.5 rounded text-[10px] uppercase">Microsoft Word cleanup</h4>
+                  <div class="grid grid-cols-1 gap-1.5 pl-1.5">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-mso" class="rounded text-primary focus:ring-0" checked> Remove mso-* CSS style attributes
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-xmlns" class="rounded text-primary focus:ring-0" checked> Remove xmlns and xml:lang schemas
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-op-tags" class="rounded text-primary focus:ring-0" checked> Remove &lt;o:p&gt; Office elements
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-conditional-comments" class="rounded text-primary focus:ring-0" checked> Remove Office conditional comments
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Group 5: Google Docs specific -->
+                <div>
+                  <h4 class="font-bold text-slate-700 mb-1.5 bg-slate-50 py-1 px-1.5 rounded text-[10px] uppercase">Google Docs cleanup</h4>
+                  <div class="grid grid-cols-1 gap-1.5 pl-1.5">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-gdocs-classes" class="rounded text-primary focus:ring-0" checked> Remove Google Docs classes (id="docs-...")
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-gdocs-b" class="rounded text-primary focus:ring-0" checked> Remove b style="font-weight:normal"
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Group 6: Link cleanup -->
+                <div>
+                  <h4 class="font-bold text-slate-700 mb-1.5 bg-slate-50 py-1 px-1.5 rounded text-[10px] uppercase">Link cleanup</h4>
+                  <div class="grid grid-cols-1 gap-1.5 pl-1.5">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-remove-hrefs" class="rounded text-primary focus:ring-0"> Strip href codes only (keep link text)
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-remove-links" class="rounded text-primary focus:ring-0"> Strip links entirely (unwrap all &lt;a&gt;)
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-remove-targets" class="rounded text-primary focus:ring-0"> Remove target attributes
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-remove-rels" class="rounded text-primary focus:ring-0"> Remove rel attributes
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Group 7: Table cleanup -->
+                <div>
+                  <h4 class="font-bold text-slate-700 mb-1.5 bg-slate-50 py-1 px-1.5 rounded text-[10px] uppercase">Table cleanup</h4>
+                  <div class="grid grid-cols-1 gap-1.5 pl-1.5">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-table-dims" class="rounded text-primary focus:ring-0"> Remove table width / height attributes
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-table-border-attr" class="rounded text-primary focus:ring-0"> Remove border attributes
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-table-styles" class="rounded text-primary focus:ring-0"> Remove table inline CSS styles
+                    </label>
+                  </div>
+                </div>
+
+                <!-- Group 8: Whitespace & formatting -->
+                <div>
+                  <h4 class="font-bold text-slate-700 mb-1.5 bg-slate-50 py-1 px-1.5 rounded text-[10px] uppercase">Whitespace & formatting</h4>
+                  <div class="grid grid-cols-1 gap-1.5 pl-1.5">
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-spaces" class="rounded text-primary focus:ring-0" checked> Collapse multiple sequences of spaces
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-blank-lines" class="rounded text-primary focus:ring-0"> Remove extra blank lines (&gt;2 empty tags)
+                    </label>
+                    <label class="flex items-center gap-2 cursor-pointer font-medium text-slate-600 hover:text-slate-900">
+                      <input type="checkbox" id="opt-trim-tags" class="rounded text-primary focus:ring-0"> Trim whitespace inside text nodes
+                    </label>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Options Panel Footer -->
+              <div class="flex items-center justify-between pt-3 border-t border-slate-100">
+                <button type="button" onclick="resetCheckboxes()" class="px-2.5 py-1.5 border border-slate-300 hover:bg-slate-50 font-semibold rounded text-slate-600 transition">Reset to Default</button>
+                <div class="flex items-center gap-2">
+                  <button type="button" onclick="toggleCleanPanel()" class="px-2.5 py-1.5 hover:bg-slate-100 font-semibold rounded text-slate-500 transition">Cancel</button>
+                  <button type="button" onclick="applyCleanupAndClose()" class="px-4 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded transition shadow-sm">Clean Now</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- HTML Code Editor Area with Line Numbers -->
+        <div class="border border-[#dee2e6] rounded-md overflow-hidden bg-[#272822] flex min-h-[440px] max-h-[600px] relative">
+          <!-- Live Line Numbers -->
+          <div id="html-line-numbers" class="w-12 bg-[#1e1f1c] border-r border-[#3e3f3b] py-4 text-right pr-3 select-none text-[#5c6370] font-mono text-xs leading-6 overflow-hidden">
+            <div>1</div>
+          </div>
+          <!-- Syntax Highlight Overlay Textarea -->
+          <div class="grow relative flex">
+            <!-- Hidden textarea for input -->
+            <textarea id="html-code-area" oninput="onHtmlSourceInput(this.value)" onscroll="syncHtmlScroll()" class="w-full h-full bg-transparent text-[#f8f8f2] font-mono text-[13px] leading-6 p-4 outline-none border-0 block resize-none z-10 whitespace-pre overflow-auto font-medium" style="caret-color: white;"></textarea>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Below the panels: Copy & Export Box (Always visible) -->
+    <div class="bg-white border border-[#dee2e6] rounded-lg p-4 shadow-subtle min-h-[75px] mt-4 flex flex-col md:flex-row items-center justify-between gap-4">
+      <div class="text-xs text-slate-500 leading-relaxed font-semibold max-w-sm">
+        Output code is fully compatible with WordPress Gutenberg, Elementor, HTML Mail, and classic layout blocks. No hidden tracking tags are injected.
+      </div>
+      <div class="flex flex-wrap gap-2 justify-end w-full md:w-auto">
+        <!-- Copy HTML -->
+        <button type="button" onclick="copyHtmlToClipboard()" class="px-4 py-2 bg-primary hover:bg-primary-hover text-white rounded font-bold text-xs flex items-center gap-1.5 shadow-sm transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M8 5H6a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2v-1M8 5a2 2 0 002 2h2a2 2 0 002-2M8 5a2 2 0 012-2h2a2 2 0 012 2m0 0h2a2 2 0 012 2v3m2 4H10m0 0l3-3m-3 3l3 3"></path></svg>
+          Copy HTML
+        </button>
+        <!-- Copy plain text -->
+        <button type="button" onclick="copyPlaintextToClipboard()" class="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-bold text-xs flex items-center gap-1.5 shadow-sm transition bg-white">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path></svg>
+          Copy Plain Text
+        </button>
+        <!-- Download .html -->
+        <button type="button" onclick="downloadHtmlFile()" class="px-4 py-2 bg-slate-800 hover:bg-slate-900 text-white rounded font-bold text-xs flex items-center gap-1.5 shadow-sm transition">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4"></path></svg>
+          Download .html
+        </button>
+        <!-- Download .txt -->
+        <button type="button" onclick="downloadTxtFile()" class="px-4 py-2 border border-slate-300 hover:bg-slate-50 text-slate-700 rounded font-bold text-xs flex items-center gap-1.5 shadow-sm transition bg-white">
+          <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 10v6m0 0l-3-3m3 3l3-3M3 17V7a2 2 0 012-2h6l2 2h7a2 2 0 012 2v8a2 2 0 01-2 2H5a2 2 0 01-2-2z"></path></svg>
+          Download .txt
+        </button>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Table Cell Utility Custom Context Menu -->
+  <div id="table-context-menu" class="hidden absolute bg-white border border-slate-300 shadow-xl rounded-md py-1.5 w-52 z-50 text-xs font-semibold text-slate-700">
+    <div class="px-3 py-1 text-[10px] text-slate-400 uppercase select-none border-b border-slate-100 mb-1">Table Controls</div>
+    <!-- Rows -->
+    <button onclick="contextAction('addRowAbove')" class="w-full text-left px-3 py-2 hover:bg-primary-light hover:text-primary transition flex items-center gap-2">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M5 15l7-7 7 7"></path></svg>
+      Insert Row Above
+    </button>
+    <button onclick="contextAction('addRowBelow')" class="w-full text-left px-3 py-2 hover:bg-primary-light hover:text-primary transition flex items-center gap-2">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7"></path></svg>
+      Insert Row Below
+    </button>
+    <button onclick="contextAction('deleteRow')" class="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 transition flex items-center gap-2 border-b border-slate-100">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"></path></svg>
+      Delete This Row
+    </button>
+    <!-- Columns -->
+    <button onclick="contextAction('addColumnLeft')" class="w-full text-left px-3 py-2 hover:bg-primary-light hover:text-primary transition flex items-center gap-2">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7"></path></svg>
+      Insert Column Left
+    </button>
+    <button onclick="contextAction('addColumnRight')" class="w-full text-left px-3 py-2 hover:bg-primary-light hover:text-primary transition flex items-center gap-2">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7"></path></svg>
+      Insert Column Right
+    </button>
+    <button onclick="contextAction('deleteColumn')" class="w-full text-left px-3 py-2 hover:bg-red-50 text-red-600 transition flex items-center gap-2 border-b border-slate-100">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12"></path></svg>
+      Delete This Column
+    </button>
+    <!-- Merge / Split -->
+    <button onclick="contextAction('mergeCells')" class="w-full text-left px-3 py-2 hover:bg-primary-light hover:text-primary transition flex items-center gap-2">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 6h16M4 12h16M4 18h16"></path></svg>
+      Merge Select Tags (Span)
+    </button>
+    <button onclick="contextAction('splitCell')" class="w-full text-left px-3 py-2 hover:bg-primary-light hover:text-primary transition flex items-center gap-2">
+      <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M4 5a1 1 0 011-1h14a1 1 0 011 1v14a1 1 0 01-1 1H5a1 1 0 01-1-1V5z"></path></svg>
+      Split Block / Cells
+    </button>
+  </div>
+
+  <!-- Toast Notification -->
+  <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 border border-slate-800 text-white font-semibold text-xs px-4 py-3 rounded-lg shadow-2xl opacity-0 transform translate-y-2 pointer-events-none transition-all duration-300 z-50 flex items-center gap-2">
+    <div class="w-2 h-2 rounded-full bg-emerald-400 animate-ping"></div>
+    <span id="toast-text">HTML Copied!</span>
+  </div>
+
+  <!-- JAVASCRIPT LOGIC -->
+  <script>
+    // State Variables
+    let currentTab = 'word';
+    let documentHtml = '';
+    let originalBeforeClean = ''; // For "Reset to original/Undo Last Clean"
+    let hasCleanedHistory = false;
+    let selectedCell = null; // Right-click node tracking
+
+    // Initial default layout loaded
+    document.addEventListener("DOMContentLoaded", () => {
+      // Setup default placeholder checks
+      resetCheckboxes();
+      // Initialize counts
+      updateCounters();
+      
+      // Auto RTL and formatting handling
+      document.getElementById('word-editor').addEventListener('paste', handleEditorPaste);
+      document.getElementById('word-editor').focus();
+
+      // Close popups on outer click
+      document.addEventListener('click', (e) => {
+        const tablePicker = document.getElementById('table-picker-popup');
+        const insertBtn = document.getElementById('insert-table-btn');
+        if (!insertBtn.contains(e.target) && !tablePicker.contains(e.target)) {
+          tablePicker.classList.add('hidden');
+        }
+
+        const cleanPanel = document.getElementById('clean-options-panel');
+        const cleanBtn = document.getElementById('clean-panel-toggle-btn');
+        if (cleanPanel && cleanBtn && !cleanBtn.contains(e.target) && !cleanPanel.contains(e.target)) {
+          cleanPanel.classList.add('hidden');
+        }
+
+        const contextMenu = document.getElementById('table-context-menu');
+        if (!contextMenu.contains(e.target)) {
+          contextMenu.classList.add('hidden');
+        }
+      });
+
+      // Right-Click Listener on editor for table manipulation
+      document.getElementById('word-editor').addEventListener('contextmenu', (e) => {
+        const td = e.target.closest('td') || e.target.closest('th');
+        if (td) {
+          e.preventDefault();
+          selectedCell = td;
+          const contextMenu = document.getElementById('table-context-menu');
+          contextMenu.style.left = e.pageX + 'px';
+          contextMenu.style.top = e.pageY + 'px';
+          contextMenu.classList.remove('hidden');
+        }
+      });
+
+      // Keyboard Bindings: Ctrl+H for search, Ctrl+B, I, U
+      document.addEventListener('keydown', (e) => {
+        if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'h') {
+          e.preventDefault();
+          toggleFindReplace();
+        }
+      });
+    });
+
+    // --- TAB SYSTEM ---
+    function switchTab(tab) {
+      if (currentTab === tab) return;
+
+      const wordBtn = document.getElementById('tab-word-btn');
+      const htmlBtn = document.getElementById('tab-html-btn');
+      const wordContainer = document.getElementById('tab-word');
+      const htmlContainer = document.getElementById('tab-html');
+
+      // Sync content first
+      if (currentTab === 'word') {
+        const isInlineTextarea = !document.getElementById('word-editor-textarea').classList.contains('hidden');
+        if (isInlineTextarea) {
+          documentHtml = document.getElementById('word-editor-textarea').value;
+          document.getElementById('word-editor').innerHTML = documentHtml;
+        } else {
+          documentHtml = document.getElementById('word-editor').innerHTML;
+        }
+      } else if (currentTab === 'html') {
+        documentHtml = document.getElementById('html-code-area').value;
+        const inlineArea = document.getElementById('word-editor-textarea');
+        document.getElementById('word-editor').innerHTML = documentHtml;
+        inlineArea.value = documentHtml;
+      }
+
+      currentTab = tab;
+
+      if (tab === 'word') {
+        // Activate Word UI
+        wordBtn.className = "px-6 py-3 font-semibold rounded-t-lg transition-all duration-150 flex items-center gap-2 border-t-2 border-transparent bg-white border-x border-t border-b-white text-primary z-10 translate-y-[1px]";
+        htmlBtn.className = "px-6 py-3 font-semibold rounded-t-lg transition-all duration-150 flex items-center gap-2 text-slate-600 bg-slate-100 hover:bg-slate-200 border-x border-t border-transparent translate-y-[1px]";
+        wordContainer.classList.remove('hidden');
+        htmlContainer.classList.add('hidden');
+        
+        // Count characters or verify first character RTL
+        detectRtlWord(document.getElementById('word-editor').textContent || "");
+        updateCounters();
+      } else {
+        // Activate HTML UI
+        htmlBtn.className = "px-6 py-3 font-semibold rounded-t-lg transition-all duration-150 flex items-center gap-2 border-t-2 border-transparent bg-white border-x border-t border-b-white text-primary z-10 translate-y-[1px]";
+        wordBtn.className = "px-6 py-3 font-semibold rounded-t-lg transition-all duration-150 flex items-center gap-2 text-slate-600 bg-slate-100 hover:bg-slate-200 border-x border-t border-transparent translate-y-[1px]";
+        htmlContainer.classList.remove('hidden');
+        wordContainer.classList.add('hidden');
+
+        // Render code
+        document.getElementById('html-code-area').value = documentHtml;
+        syncHtmlLineNumbers(documentHtml);
+      }
+    }
+
+    // --- WYSIWYG COMMAND RUNNER ---
+    function execCmd(command, val = '') {
+      document.execCommand(command, false, val);
+      onWordInput();
+      document.getElementById('word-editor').focus();
+    }
+
+    function clearFormatting() {
+      // Highlight wrapper tool command to strip inline styles from selection
+      document.execCommand('removeFormat', false);
+      // Remove inline wrapping span/styles manually in selected range if needed
+      const sel = window.getSelection();
+      if (!sel.isCollapsed) {
+        let node = sel.anchorNode;
+        while(node && node !== document.getElementById('word-editor')) {
+          if (node.nodeType === 1 && node.hasAttribute('style')) {
+            node.removeAttribute('style');
+          }
+          node = node.parentNode;
+        }
+      }
+      onWordInput();
+      showToast("Cleared selected formatting styles!");
+    }
+
+    // Link/Image Prompts
+    function promptLink() {
+      const url = prompt("Please enter the hyperlinked target address (e.g. https://google.com):", "https://");
+      if (url) {
+        execCmd('createLink', url);
+      }
+    }
+
+    function promptImage() {
+      const url = prompt("Enter full source URL link of the image:", "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=600");
+      if (url) {
+        execCmd('insertImage', url);
+        // Style newly created img tags slightly with generic rounded corners safely
+        setTimeout(() => {
+          const imgs = document.querySelectorAll('#word-editor img:not([class])');
+          imgs.forEach(i => {
+             i.style.maxWidth = '100%';
+             i.style.height = 'auto';
+             i.style.borderRadius = '4px';
+          });
+        }, 100);
+      }
+    }
+
+    // --- PASTE HANDLER FOR CLEANING MS-WORD / GOOGLE DOCS METADATA CODES ---
+    function handleEditorPaste(e) {
+      // Do NOT block standard visual paste, but strip extra rich HTML wrapper namespaces tags
+      // and retain tables/bold elements visually in editor
+      const clipboardData = e.clipboardData || window.clipboardData;
+      if (!clipboardData) return;
+
+      const html = clipboardData.getData('text/html');
+      const text = clipboardData.getData('text/plain');
+
+      if (html) {
+        e.preventDefault();
+        
+        // Clean metadata blocks and inline Microsoft / Google Docs templates before putting as active HTML flow
+        // Strip XML namespaces, o:p namespaces immediately to ensure editor doesn't feel sluggish
+        let parsed = html;
+        parsed = parsed.replace(/<link.*?>/gi, '');
+        parsed = parsed.replace(/<style([\s\S]*?)>([\s\S]*?)<\/style>/gi, '');
+        parsed = parsed.replace(/<!--[\s\S]*?-->/gi, ''); // comments
+        parsed = parsed.replace(/xmlns:o=".*?"/gi, '');
+        parsed = parsed.replace(/xmlns:w=".*?"/gi, '');
+
+        // Create virtual block, insert
+        const tempDiv = document.createElement('div');
+        tempDiv.innerHTML = parsed;
+        
+        // Clean high-bloat Google Internal Guid tags from tags first
+        const allSpans = tempDiv.querySelectorAll('span');
+        allSpans.forEach(s => {
+          if (s.id && s.id.startsWith('docs-internal-guid')) {
+            // Keep text, unwrap
+            const docNode = document.createRange();
+            docNode.selectNodeContents(s);
+            s.parentNode.replaceChild(docNode.extractContents(), s);
+          }
+        });
+
+        // Insert cleaned draft
+        const selection = window.getSelection();
+        if (selection.getRangeAt && selection.rangeCount) {
+          const range = selection.getRangeAt(0);
+          range.deleteContents();
+          const docFrag = document.createDocumentFragment();
+          while (tempDiv.firstChild) {
+            docFrag.appendChild(tempDiv.firstChild);
+          }
+          range.insertNode(docFrag);
+        }
+      }
+      
+      setTimeout(() => {
+        onWordInput();
+      }, 50);
+    }
+
+    // --- RTL/LTR Toggles and Detectors ---
+    function detectRtlWord(text) {
+      if (!text || text.trim() === '') return;
+      const firstChar = text.trim().charAt(0);
+      // Check Hebrew / Arabic Unicode ranges
+      const isRtl = /[\u0590-\u05FF\u0600-\u06FF\u0750-\u077F]/.test(firstChar);
+      setWordDirection(isRtl ? 'rtl' : 'ltr');
+    }
+
+    function setWordDirection(dir) {
+      const editor = document.getElementById('word-editor');
+      const ltrBtn = document.getElementById('dir-ltr-btn');
+      const rtlBtn = document.getElementById('dir-rtl-btn');
+      const textLabel = document.getElementById('current-dir-text');
+
+      if (dir === 'rtl') {
+        editor.dir = 'rtl';
+        editor.style.textAlign = 'right';
+        rtlBtn.className = "px-2 py-1 rounded bg-white text-slate-800 font-bold shadow-sm";
+        ltrBtn.className = "px-2 py-1 rounded text-slate-600 font-bold";
+        textLabel.textContent = "RTL";
+      } else {
+        editor.dir = 'ltr';
+        editor.style.textAlign = 'left';
+        ltrBtn.className = "px-2 py-1 rounded bg-white text-slate-800 font-bold shadow-sm";
+        rtlBtn.className = "px-2 py-1 rounded text-slate-600 font-bold";
+        textLabel.textContent = "LTR";
+      }
+    }
+
+    // --- WORD COUNTERS ---
+    function onWordInput() {
+      const textContent = document.getElementById('word-editor').textContent || "";
+      
+      // Auto detect on first letters
+      if (textContent.trim().length === 1) {
+        detectRtlWord(textContent);
+      }
+      
+      updateCounters();
+    }
+
+    function updateCounters() {
+      const editor = document.getElementById('word-editor');
+      const text = editor.textContent || "";
+      
+      // Chars
+      const charCount = text.length;
+      
+      // Words
+      const cleanedText = text.replace(/[\t\r\n]/g, " ").trim();
+      const words = cleanedText ? cleanedText.split(/\s+/).length : 0;
+
+      document.getElementById('char-count-val').textContent = charCount;
+      document.getElementById('word-count-val').textContent = words;
+      document.getElementById('char-word-counts-summary').textContent = `${charCount} chars | ${words} words`;
+    }
+
+    // --- SOURCE CODE INLINE TOGGLE ---
+    function toggleSourceInWord() {
+      const editorFrame = document.getElementById('word-editor');
+      const textareaFrame = document.getElementById('word-editor-textarea');
+      const btn = document.getElementById('source-toggle-btn');
+
+      const isRichTextVisible = !editorFrame.classList.contains('hidden');
+
+      if (isRichTextVisible) {
+        // Transition to textarea raw tag edit inside Word panel
+        textareaFrame.value = editorFrame.innerHTML;
+        editorFrame.classList.add('hidden');
+        textareaFrame.classList.remove('hidden');
+        btn.querySelector('span').textContent = 'WYSIWYG';
+        btn.className = "px-2 py-1 border border-primary bg-primary-light hover:bg-[#e0ecfc] rounded text-xs font-bold transition-all duration-150 flex items-center gap-1 text-primary shadow-inner";
+      } else {
+        // Transition back to parsed rich text inside Word panel
+        editorFrame.innerHTML = textareaFrame.value;
+        textareaFrame.classList.add('hidden');
+        editorFrame.classList.remove('hidden');
+        btn.querySelector('span').textContent = '<> Code';
+        btn.className = "px-2 py-1 border border-slate-300 hover:bg-slate-200 rounded text-xs font-bold transition-all duration-150 flex items-center gap-1 bg-white";
+        updateCounters();
+      }
+    }
+
+    function onTextAreaInput(val) {
+      // Sync raw model content automatically
+      documentHtml = val;
+    }
+
+    // --- FIND & REPLACE LOGIC ---
+    function toggleFindReplace() {
+      const panel = document.getElementById('find-replace-panel');
+      panel.classList.toggle('hidden');
+      if (!panel.classList.contains('hidden')) {
+        document.getElementById('find-input').focus();
+      }
+    }
+
+    function findMatches() {
+      const query = document.getElementById('find-input').value;
+      if (!query) {
+        showToast("Enter a search term first.");
+        return;
+      }
+      
+      const text = document.getElementById('word-editor').textContent;
+      const count = (text.match(new RegExp(escapeRegExp(query), 'gi')) || []).length;
+      showToast(`Found ${count} occurrences of "${query}".`);
+    }
+
+    function replaceNext() {
+      const findVal = document.getElementById('find-input').value;
+      const replaceVal = document.getElementById('replace-input').value;
+      
+      if (!findVal) return;
+      
+      const editor = document.getElementById('word-editor');
+      const html = editor.innerHTML;
+      
+      const regex = new RegExp(escapeRegExp(findVal), 'i'); // Replace one
+      if (regex.test(html)) {
+        editor.innerHTML = html.replace(regex, replaceVal);
+        onWordInput();
+        showToast("Replaced next occurrence!");
+      } else {
+        showToast("No matches found to replace.");
+      }
+    }
+
+    function replaceAll() {
+      const findVal = document.getElementById('find-input').value;
+      const replaceVal = document.getElementById('replace-input').value;
+      
+      if (!findVal) return;
+      
+      const editor = document.getElementById('word-editor');
+      const html = editor.innerHTML;
+      
+      const regex = new RegExp(escapeRegExp(findVal), 'g');
+      const count = (html.match(regex) || []).length;
+      
+      if (count > 0) {
+        editor.innerHTML = html.replace(regex, replaceVal);
+        onWordInput();
+        showToast(`Successfully replaced all ${count} occurrences.`);
+      } else {
+        showToast("No occurrences found.");
+      }
+    }
+
+    function escapeRegExp(string) {
+      return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    }
+
+    // --- TABLE GENERATOR PICKER ---
+    function toggleTablePicker() {
+      const popup = document.getElementById('table-picker-popup');
+      popup.classList.toggle('hidden');
+      resetTablePicker();
+    }
+
+    function hoverTablePicker(row, col) {
+      const label = document.getElementById('table-picker-label');
+      label.textContent = `${row} × ${col} Table`;
+
+      const gridSquares = document.querySelectorAll('[data-row]');
+      gridSquares.forEach(el => {
+        const r = parseInt(el.getAttribute('data-row'));
+        const c = parseInt(el.getAttribute('data-col'));
+        if (r <= row && c <= col) {
+          el.className = "w-3.5 h-3.5 border border-primary bg-primary-light rounded-[1px] transition-colors duration-75";
+        } else {
+          el.className = "w-3.5 h-3.5 border border-slate-200 rounded-[1px] bg-white transition-colors duration-75";
+        }
+      });
+    }
+
+    function resetTablePicker() {
+      const label = document.getElementById('table-picker-label');
+      label.textContent = '0 × 0 Table';
+      const gridSquares = document.querySelectorAll('[data-row]');
+      gridSquares.forEach(el => {
+        el.className = "w-3.5 h-3.5 border border-slate-200 rounded-[1px] bg-white transition-colors duration-75";
+      });
+    }
+
+    function createTable(rows, cols) {
+      let html = '<table class="table-auto border-collapse w-full border border-slate-300 my-4">';
+      for(let r=0; r<rows; r++) {
+        html += '<tr>';
+        for(let c=0; c<cols; c++) {
+          if (r === 0) {
+            html += '<th class="border border-slate-300 bg-slate-50 p-2 font-semibold">Header</th>';
+          } else {
+            html += '<td class="border border-slate-300 p-2">Cell</td>';
+          }
+        }
+        html += '</tr>';
+      }
+      html += '</table>';
+
+      // Insert HTML into selection
+      execCmd('insertHTML', html);
+      document.getElementById('table-picker-popup').classList.add('hidden');
+      showToast(`Created a ${rows}×${cols} table!`);
+    }
+
+    // Context actions on Tables via right click menu
+    function contextAction(action) {
+      if (!selectedCell) return;
+      const tr = selectedCell.parentNode;
+      const table = tr.parentNode.closest('table');
+      if (!table) return;
+
+      const rowIndex = Array.from(tr.parentNode.children).indexOf(tr);
+      const colIndex = Array.from(tr.children).indexOf(selectedCell);
+
+      switch(action) {
+        case 'addRowAbove': {
+          const newTr = table.insertRow(rowIndex);
+          for(let i=0; i<tr.cells.length; i++) {
+            const newTd = newTr.insertCell();
+            newTd.className = "border border-slate-300 p-2";
+            newTd.innerHTML = "Cell";
+          }
+          break;
+        }
+        case 'addRowBelow': {
+          const newTr = table.insertRow(rowIndex + 1);
+          for(let i=0; i<tr.cells.length; i++) {
+            const newTd = newTr.insertCell();
+            newTd.className = "border border-slate-300 p-2";
+            newTd.innerHTML = "Cell";
+          }
+          break;
+        }
+        case 'deleteRow': {
+          table.deleteRow(rowIndex);
+          break;
+        }
+        case 'addColumnLeft': {
+          const allRows = table.rows;
+          for(let i=0; i<allRows.length; i++) {
+            const checkTr = allRows[i];
+            const newCell = checkTr.insertCell(colIndex);
+            newCell.className = "border border-slate-300 p-2";
+            newCell.innerHTML = "Cell";
+          }
+          break;
+        }
+        case 'addColumnRight': {
+          const allRows = table.rows;
+          for(let i=0; i<allRows.length; i++) {
+            const checkTr = allRows[i];
+            const newCell = checkTr.insertCell(colIndex + 1);
+            newCell.className = "border border-slate-300 p-2";
+            newCell.innerHTML = "Cell";
+          }
+          break;
+        }
+        case 'deleteColumn': {
+          const allRows = table.rows;
+          for(let i=0; i<allRows.length; i++) {
+            allRows[i].deleteCell(colIndex);
+          }
+          break;
+        }
+        case 'mergeCells': {
+          // Manually add horizontal span count
+          const spanInput = prompt("Enter columns span count to merge rightwards:", "2");
+          if (spanInput) {
+            selectedCell.colSpan = parseInt(spanInput);
+          }
+          break;
+        }
+        case 'splitCell': {
+          selectedCell.colSpan = 1;
+          selectedCell.rowSpan = 1;
+          break;
+        }
+      }
+
+      // Hide Context menu and trigger update handlers
+      document.getElementById('table-context-menu').classList.add('hidden');
+      onWordInput();
+      showToast(`Applied table edit!`);
+    }
+
+    // --- HTML CLEANER ENGINE (DOM TRAVERSER) ---
+    function toggleCleanPanel() {
+      const panel = document.getElementById('clean-options-panel');
+      panel.classList.toggle('hidden');
+    }
+
+    function resetCheckboxes() {
+      // Default recommended configurations to ON according to prompt instruction
+      const checklist = {
+        'opt-comments': true,
+        'opt-meta-tags': true,
+        'opt-style-blocks': true,
+        'opt-scripts': true,
+        'opt-mso': true,
+        'opt-xmlns': true,
+        'opt-op-tags': true,
+        'opt-conditional-comments': true,
+        'opt-gdocs-classes': true,
+        'opt-gdocs-b': true,
+        'opt-spaces': true
+      };
+
+      // Set all other checkboxes to false
+      const allCheckboxes = document.querySelectorAll('#clean-options-panel input[type="checkbox"]');
+      allCheckboxes.forEach(cb => {
+        cb.checked = checklist[cb.id] || false;
+      });
+    }
+
+    function applyCleanupAndClose() {
+      // Sync first
+      const sourceHtml = document.getElementById('html-code-area').value;
+      originalBeforeClean = sourceHtml; // Backup current state
+      
+      const cleaned = cleanHTML(sourceHtml);
+      
+      document.getElementById('html-code-area').value = cleaned;
+      documentHtml = cleaned;
+      syncHtmlLineNumbers(cleaned);
+
+      // Show Undo last clean
+      document.getElementById('undo-clean-btn').classList.remove('hidden');
+      hasCleanedHistory = true;
+
+      // Close dropdown
+      document.getElementById('clean-options-panel').classList.add('hidden');
+      showToast("Filtered HTML successfully based on selected clean properties!");
+    }
+
+    function undoClean() {
+      if (!hasCleanedHistory) return;
+      document.getElementById('html-code-area').value = originalBeforeClean;
+      documentHtml = originalBeforeClean;
+      syncHtmlLineNumbers(originalBeforeClean);
+      document.getElementById('undo-clean-btn').classList.add('hidden');
+      showToast("Undone last cleaning action!");
+    }
+
+    function cleanHTML(rawHtml) {
+      // 1. Structural parser
+      const parser = new DOMParser();
+      
+      // Keep structural wrappers safe
+      const doc = parser.parseFromString(`<body>${rawHtml}bodyhtml_anchor_node</body>`, 'text/html');
+      const body = doc.body;
+
+      // Check toggled checkboxes
+      const optAllStyles = document.getElementById('opt-all-styles').checked;
+      const optFontTags = document.getElementById('opt-font-tags').checked;
+      const optColorAttrs = document.getElementById('opt-color-attrs').checked;
+      const optSizeAttrs = document.getElementById('opt-size-attrs').checked;
+      const optFontSize = document.getElementById('opt-fontsize').checked;
+      const optFontFamily = document.getElementById('opt-fontfamily').checked;
+      const optBgStyles = document.getElementById('opt-bg-styles').checked;
+      const optAlignStyles = document.getElementById('opt-align-styles').checked;
+
+      const optClasses = document.getElementById('opt-classes').checked;
+      const optIds = document.getElementById('opt-ids').checked;
+      const optDataAttrs = document.getElementById('opt-data-attrs').checked;
+      const optAriaAttrs = document.getElementById('opt-aria-attrs').checked;
+      const optEmptyTags = document.getElementById('opt-empty-tags').checked;
+      const optBrBlock = document.getElementById('opt-br-block').checked;
+      const optUnwrapSpans = document.getElementById('opt-unwrap-spans').checked;
+      const optDivWrappers = document.getElementById('opt-div-wrappers').checked;
+
+      const optMetaTags = document.getElementById('opt-meta-tags').checked;
+      const optStyleBlocks = document.getElementById('opt-style-blocks').checked;
+      const optScripts = document.getElementById('opt-scripts').checked;
+
+      const optMso = document.getElementById('opt-mso').checked;
+      const optXmlns = document.getElementById('opt-xmlns').checked;
+      const optOpTags = document.getElementById('opt-op-tags').checked;
+
+      const optGdocsClasses = document.getElementById('opt-gdocs-classes').checked;
+      const optGdocsB = document.getElementById('opt-gdocs-b').checked;
+
+      const optRemoveHrefs = document.getElementById('opt-remove-hrefs').checked;
+      const optRemoveLinks = document.getElementById('opt-remove-links').checked;
+      const optRemoveTargets = document.getElementById('opt-remove-targets').checked;
+      const optRemoveRels = document.getElementById('opt-remove-rels').checked;
+
+      const optTableDims = document.getElementById('opt-table-dims').checked;
+      const optTableBorderAttr = document.getElementById('opt-table-border-attr').checked;
+      const optTableStyles = document.getElementById('opt-table-styles').checked;
+
+      const optTrimTags = document.getElementById('opt-trim-tags').checked;
+
+      // Clean metadata and style sheets directly from tree representation
+      if (optMetaTags) {
+        body.querySelectorAll('meta, link, title').forEach(el => el.remove());
+      }
+      if (optStyleBlocks) {
+        body.querySelectorAll('style').forEach(el => el.remove());
+      }
+      if (optScripts) {
+        body.querySelectorAll('script, noscript, iframe').forEach(el => el.remove());
+      }
+      if (optOpTags) {
+        body.querySelectorAll('o\\:p, w\\:wrap, smarttag, *[name*="office"]').forEach(el => {
+          // Replace tag preserving children
+          const innerRange = document.createRange();
+          innerRange.selectNodeContents(el);
+          el.parentNode.replaceChild(innerRange.extractContents(), el);
+        });
+      }
+
+      // Recursive function to clear individual element nodes
+      function cleanNode(node) {
+        if (!node) return;
+        
+        if (node.nodeType === 1) { // Element Node
+          const tagName = node.tagName.toLowerCase();
+
+          // Unwrapping custom tags
+          if (optFontTags && tagName === 'font') {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            const content = range.extractContents();
+            node.parentNode.replaceChild(content, node);
+            // Re-traverse recursively of children
+            cleanNode(node.parentNode);
+            return;
+          }
+
+          if (optUnwrapSpans && tagName === 'span') {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            const content = range.extractContents();
+            node.parentNode.replaceChild(content, node);
+            cleanNode(node.parentNode);
+            return;
+          }
+
+          if (optDivWrappers && tagName === 'div') {
+            // Keep block contents or map to paragraph
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            const content = range.extractContents();
+            node.parentNode.replaceChild(content, node);
+            cleanNode(node.parentNode);
+            return;
+          }
+
+          // Link Handling
+          if (tagName === 'a') {
+            if (optRemoveLinks) {
+              const range = document.createRange();
+              range.selectNodeContents(node);
+              const content = range.extractContents();
+              node.parentNode.replaceChild(content, node);
+              cleanNode(node.parentNode);
+              return;
+            }
+            if (optRemoveHrefs) {
+              node.removeAttribute('href');
+            }
+            if (optRemoveTargets) {
+              node.removeAttribute('target');
+            }
+            if (optRemoveRels) {
+              node.removeAttribute('rel');
+            }
+          }
+
+          // Google Doc Normal Bold Wrapped tags unwrapping
+          if (optGdocsB && tagName === 'b' && node.style && node.style.fontWeight === 'normal') {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            const content = range.extractContents();
+            node.parentNode.replaceChild(content, node);
+            cleanNode(node.parentNode);
+            return;
+          }
+
+          // MS Word o:p / custom tags strip
+          if (optOpTags && tagName.includes(':')) {
+            const range = document.createRange();
+            range.selectNodeContents(node);
+            const content = range.extractContents();
+            node.parentNode.replaceChild(content, node);
+            cleanNode(node.parentNode);
+            return;
+          }
+
+          // Attributes cleanups
+          if (optAllStyles) {
+            node.removeAttribute('style');
+          } else {
+            // Partial style cleanup parses
+            let style = node.getAttribute('style') || '';
+            if (style) {
+              let declarations = style.split(';').map(d => d.trim()).filter(Boolean);
+              
+              if (optFontSize) {
+                declarations = declarations.filter(d => !d.toLowerCase().startsWith('font-size'));
+              }
+              if (optFontFamily) {
+                declarations = declarations.filter(d => !d.toLowerCase().startsWith('font-family'));
+              }
+              if (optBgStyles) {
+                declarations = declarations.filter(d => !d.toLowerCase().startsWith('background-color') && !d.toLowerCase().startsWith('background'));
+              }
+              if (optAlignStyles) {
+                declarations = declarations.filter(d => !d.toLowerCase().startsWith('text-align'));
+              }
+              if (optMso) {
+                declarations = declarations.filter(d => !d.toLowerCase().startsWith('mso-'));
+              }
+              if (optTableStyles && ['table', 'tr', 'td', 'th'].includes(tagName)) {
+                declarations = [];
+              }
+
+              if (declarations.length > 0) {
+                node.setAttribute('style', declarations.join('; '));
+              } else {
+                node.removeAttribute('style');
+              }
+            }
+          }
+
+          // ID, class, data
+          if (optClasses) {
+            node.removeAttribute('class');
+          } else if (optGdocsClasses) {
+            // Strip docs ID internal guid classes or default style guides
+            let classes = node.getAttribute('class');
+            if (classes && classes.includes('docs-internal-guid')) {
+              node.removeAttribute('class');
+            }
+          }
+
+          if (optIds) {
+            node.removeAttribute('id');
+          } else if (optGdocsClasses) {
+            let id = node.getAttribute('id') || '';
+            if (id.startsWith('docs-internal-guid')) {
+              node.removeAttribute('id');
+            }
+          }
+
+          if (optColorAttrs) {
+            node.removeAttribute('color');
+          }
+          if (optSizeAttrs) {
+            node.removeAttribute('size');
+          }
+          
+          if (optDataAttrs) {
+            Array.from(node.attributes).forEach(attr => {
+              if (attr.name.startsWith('data-')) {
+                node.removeAttribute(attr.name);
+              }
+            });
+          }
+
+          if (optAriaAttrs) {
+            Array.from(node.attributes).forEach(attr => {
+              if (attr.name.startsWith('aria-')) {
+                node.removeAttribute(attr.name);
+              }
+            });
+          }
+
+          if (optXmlns) {
+            node.removeAttribute('xmlns');
+            node.removeAttribute('xmlns:o');
+            node.removeAttribute('xmlns:w');
+            node.removeAttribute('xml:lang');
+          }
+
+          // Tables specific attributes
+          if (['table', 'tr', 'td', 'th'].includes(tagName)) {
+            if (optTableDims) {
+              node.removeAttribute('width');
+              node.removeAttribute('height');
+              node.removeAttribute('cellpadding');
+              node.removeAttribute('cellspacing');
+            }
+            if (optTableBorderAttr) {
+              node.removeAttribute('border');
+            }
+          }
+
+          // br elements inside blocks
+          if (optBrBlock && tagName === 'br') {
+            const parent = node.parentNode;
+            if (parent && ['p', 'h1', 'h2', 'h3', 'h4', 'blockquote', 'li'].includes(parent.tagName.toLowerCase())) {
+              node.remove();
+              return;
+            }
+          }
+
+          // Trim text node wrappers
+          if (optTrimTags) {
+            if (node.childNodes.length === 1 && node.firstChild.nodeType === 3) {
+              node.firstChild.nodeValue = node.firstChild.nodeValue.trim();
+            }
+          }
+        }
+
+        // Handle children recursive traversals safely
+        let child = node.firstChild;
+        while(child) {
+          const next = child.nextSibling;
+          cleanNode(child);
+          child = next;
+        }
+
+        // Post-traversal: Remove empty tags if toggled
+        if (node.nodeType === 1 && optEmptyTags) {
+          const tagName = node.tagName.toLowerCase();
+          const keepTags = ['body', 'html', 'img', 'br', 'hr', 'td', 'th', 'tr', 'table'];
+          if (!keepTags.includes(tagName) && node.innerHTML.trim() === '') {
+            node.remove();
+          }
+        }
+      }
+
+      // Run traversal
+      cleanNode(body);
+
+      // Extract cleaned serialization
+      let finalHtml = body.innerHTML;
+
+      // Extract our custom marker
+      finalHtml = finalHtml.replace('bodyhtml_anchor_node', '');
+
+      // Regex-based filtering on raw serialization
+      const optComments = document.getElementById('opt-comments').checked;
+      const optConditionalComments = document.getElementById('opt-conditional-comments').checked;
+      const optSpaces = document.getElementById('opt-spaces').checked;
+      const optBlankLines = document.getElementById('opt-blank-lines').checked;
+
+      if (optConditionalComments) {
+        finalHtml = finalHtml.replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, '');
+      }
+      if (optComments) {
+        finalHtml = finalHtml.replace(/<!--[\s\S]*?-->/gi, '');
+      }
+      if (optSpaces) {
+        // Collapse spaces except whitespace inside syntax code block containers
+        finalHtml = finalHtml.replace(/ {2,}/g, ' ');
+      }
+      if (optBlankLines) {
+        // Filter sequences of multiple empty tags
+        finalHtml = finalHtml.replace(/(<p>\s*(&nbsp;)?\s*<\/p>\s*){3,}/gi, '<p>&nbsp;</p>\n<p>&nbsp;</p>');
+        finalHtml = finalHtml.replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>');
+      }
+
+      return finalHtml.trim();
+    }
+
+    // --- HTML EDIT AREA CODE LINENUMBER ENGINE ---
+    function syncHtmlLineNumbers(html) {
+      const lineNumbersBox = document.getElementById('html-line-numbers');
+      if (!lineNumbersBox) return;
+
+      const lines = html.split('\n').length || 1;
+      let lineHtml = '';
+      for (let i = 1; i <= lines; i++) {
+        lineHtml += `<div>${i}</div>`;
+      }
+      lineNumbersBox.innerHTML = lineHtml;
+    }
+
+    function onHtmlSourceInput(val) {
+      documentHtml = val;
+      syncHtmlLineNumbers(val);
+    }
+
+    function syncHtmlScroll() {
+      const ta = document.getElementById('html-code-area');
+      const lines = document.getElementById('html-line-numbers');
+      lines.scrollTop = ta.scrollTop;
+    }
+
+    // --- COPY / EXPORT CONTROLLER ---
+    function showToast(text) {
+      const toast = document.getElementById('toast');
+      const toastText = document.getElementById('toast-text');
+      toastText.textContent = text;
+      toast.classList.remove('opacity-0', 'translate-y-2', 'pointer-events-none');
+      toast.classList.add('opacity-100', 'translate-y-0');
+
+      setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2', 'pointer-events-none');
+        toast.classList.remove('opacity-100', 'translate-y-0');
+      }, 2100);
+    }
+
+    function copyHtmlToClipboard() {
+      // Sync document content
+      let textToCopy = '';
+      if (currentTab === 'word') {
+        const isInlineTextarea = !document.getElementById('word-editor-textarea').classList.contains('hidden');
+        textToCopy = isInlineTextarea ? document.getElementById('word-editor-textarea').value : document.getElementById('word-editor').innerHTML;
+      } else {
+        textToCopy = document.getElementById('html-code-area').value;
+      }
+
+      navigator.clipboard.writeText(textToCopy).then(() => {
+        showToast("HTML Copied to Clipboard!");
+      }).catch(err => {
+        showToast("Failed to copy automatically.");
+      });
+    }
+
+    function copyPlaintextToClipboard() {
+      let sourceTarget = '';
+      if (currentTab === 'word') {
+        sourceTarget = document.getElementById('word-editor').textContent;
+      } else {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(document.getElementById('html-code-area').value, 'text/html');
+        sourceTarget = doc.body.textContent || doc.body.innerText;
+      }
+
+      navigator.clipboard.writeText(sourceTarget.trim()).then(() => {
+        showToast("Plain text Copied to Clipboard!");
+      });
+    }
+
+    function downloadHtmlFile() {
+      let content = '';
+      if (currentTab === 'word') {
+        const isInlineTextarea = !document.getElementById('word-editor-textarea').classList.contains('hidden');
+        content = isInlineTextarea ? document.getElementById('word-editor-textarea').value : document.getElementById('word-editor').innerHTML;
+      } else {
+        content = document.getElementById('html-code-area').value;
+      }
+
+      const blob = new Blob([content], { type: 'text/html;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "document-clean.html");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("Download document-clean.html initiated!");
+    }
+
+    function downloadTxtFile() {
+      let content = '';
+      if (currentTab === 'word') {
+        content = document.getElementById('word-editor').textContent;
+      } else {
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(document.getElementById('html-code-area').value, 'text/html');
+        content = doc.body.textContent || doc.body.innerText;
+      }
+
+      const blob = new Blob([content.trim()], { type: 'text/plain;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.setAttribute("href", url);
+      link.setAttribute("download", "document-text.txt");
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      showToast("Download document-text.txt initiated!");
+    }
+  </script>
+</body>
+</html>
