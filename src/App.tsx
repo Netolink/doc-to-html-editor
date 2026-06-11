@@ -488,9 +488,8 @@ export default function App() {
   const handleWordInput = () => {
     if (quillRef.current) {
       const content = quillRef.current.root.innerHTML;
-      const sanitized = preCleanHTML(content);
-      setDocumentHtml(sanitized);
-      calculateCounters(sanitized);
+      setDocumentHtml(content);
+      calculateCounters(content);
     }
   };
 
@@ -982,181 +981,103 @@ export default function App() {
     const initialText = activeTab === 'html' && htmlTextareaRef.current ? htmlTextareaRef.current.value : documentHtml;
     setOriginalBeforeClean(initialText);
 
-    const optAllStyles = cleanOptions.allStyles;
-    const optClasses = cleanOptions.classes;
-    const optIds = cleanOptions.ids;
-    const optDataAttrs = cleanOptions.dataAttrs;
-    const optAriaAttrs = cleanOptions.ariaAttrs;
-    const optComments = cleanOptions.comments;
-    const optEmptyTags = cleanOptions.emptyTags;
-    const optRemoveTargets = cleanOptions.removeTargets;
-    const optRemoveRels = cleanOptions.removeRels;
-    const optTableAttrs = cleanOptions.tableAttrs;
-    const optOfficeGDocs = cleanOptions.officeGdocsMarkup;
-
-    // Use DOMParser as requested
-    const parser = new DOMParser();
-    const doc = parser.parseFromString(initialText, 'text/html');
-    const body = doc.body;
-
-    // Recursive traversal to safely strip attributes without changing elements/unwrap
-    const cleanDomRecursive = (node: Node) => {
-      const children = Array.from(node.childNodes);
-      for (const child of children) {
-        cleanDomRecursive(child);
-      }
-
-      // Process Comments (nodeType === 8)
-      if (node.nodeType === 8) {
-        if (optComments || optOfficeGDocs) {
-          node.parentNode?.removeChild(node);
-        }
-        return;
-      }
-
-      // Process Elements (nodeType === 1)
-      if (node.nodeType === 1) {
-        const el = node as HTMLElement;
-        const tag = el.tagName.toLowerCase();
-
-        // 1. Remove style-related attributes if optAllStyles is checked
-        if (optAllStyles) {
-          el.removeAttribute('style');
-          el.removeAttribute('color');
-          el.removeAttribute('size');
-          el.removeAttribute('face');
-        } else if (optOfficeGDocs) {
-          // Remove Microsoft-specific mso- properties from style attribute without removing style entirely
-          const styleAttr = el.getAttribute('style');
-          if (styleAttr) {
-            const cleanStyle = styleAttr
-              .split(';')
-              .map(part => part.trim())
-              .filter(part => {
-                if (!part) return false;
-                return !part.toLowerCase().startsWith('mso-');
-              })
-              .join('; ');
-            if (cleanStyle) {
-              el.setAttribute('style', cleanStyle);
-            } else {
-              el.removeAttribute('style');
-            }
-          }
-        }
-
-        // 2. Remove class attributes
-        if (optClasses) {
-          el.removeAttribute('class');
-        } else if (optOfficeGDocs) {
-          const cls = el.getAttribute('class');
-          if (cls && cls.includes('docs-internal-guid')) {
-            el.removeAttribute('class');
-          }
-        }
-
-        // 3. Remove ID attributes
-        if (optIds) {
-          el.removeAttribute('id');
-        } else if (optOfficeGDocs) {
-          const idVal = el.getAttribute('id');
-          if (idVal && idVal.startsWith('docs-internal-guid')) {
-            el.removeAttribute('id');
-          }
-        }
-
-        // 4. Remove data-* attributes
-        if (optDataAttrs) {
-          const attrsToRemove: string[] = [];
-          for (let i = 0; i < el.attributes.length; i++) {
-            const name = el.attributes[i].name;
-            if (name.startsWith('data-')) {
-              attrsToRemove.push(name);
-            }
-          }
-          attrsToRemove.forEach(name => el.removeAttribute(name));
-        }
-
-        // 5. Remove aria-* attributes
-        if (optAriaAttrs) {
-          const attrsToRemove: string[] = [];
-          for (let i = 0; i < el.attributes.length; i++) {
-            const name = el.attributes[i].name;
-            if (name.startsWith('aria-')) {
-              attrsToRemove.push(name);
-            }
-          }
-          attrsToRemove.forEach(name => el.removeAttribute(name));
-        }
-
-        // 6. Remove target and rel from links
-        if (tag === 'a') {
-          if (optRemoveTargets) {
-            el.removeAttribute('target');
-          }
-          if (optRemoveRels) {
-            el.removeAttribute('rel');
-          }
-        }
-
-        // 7. Remove table attributes
-        if (optTableAttrs && ['table', 'tr', 'td', 'th', 'thead', 'tbody'].includes(tag)) {
-          el.removeAttribute('width');
-          el.removeAttribute('height');
-          el.removeAttribute('cellpadding');
-          el.removeAttribute('cellspacing');
-          el.removeAttribute('border');
-        }
-
-        // 8. Remove Office/GDocs markup namespace attributes
-        if (optOfficeGDocs) {
-          el.removeAttribute('xmlns');
-          el.removeAttribute('xmlns:o');
-          el.removeAttribute('xmlns:w');
-          el.removeAttribute('xml:lang');
-
-          const officeAttrs: string[] = [];
-          for (let i = 0; i < el.attributes.length; i++) {
-            const name = el.attributes[i].name;
-            if (name.includes(':')) {
-              officeAttrs.push(name);
-            }
-          }
-          officeAttrs.forEach(name => el.removeAttribute(name));
-        }
-
-        // 9. Remove empty elements only (never touch other elements or its text content)
-        if (optEmptyTags) {
-          const NEVER_REMOVE_TAGS = ['li', 'ul', 'ol', 'td', 'th', 'tr', 'table', 'thead', 'tbody', 'body', 'html'];
-          if (!NEVER_REMOVE_TAGS.includes(tag)) {
-            const hasImgBrHr = el.querySelector('img, br, hr') !== null;
-            if (el.textContent?.trim() === '' && !hasImgBrHr) {
-              el.parentNode?.removeChild(el);
-              return;
-            }
-          }
-        }
-      }
+    // Map the checkboxes to the options format
+    const options = {
+      removeStyles: cleanOptions.allStyles,
+      removeClasses: cleanOptions.classes,
+      removeIds: cleanOptions.ids,
+      removeDataAttrs: cleanOptions.dataAttrs,
+      removeAriaAttrs: cleanOptions.ariaAttrs,
+      removeComments: cleanOptions.comments,
+      removeOfficeMarkup: cleanOptions.officeGdocsMarkup,
+      removeLinkTarget: cleanOptions.removeTargets,
+      removeLinkRel: cleanOptions.removeRels,
+      removeTableAttrs: cleanOptions.tableAttrs,
+      removeEmptyTags: cleanOptions.emptyTags,
+      removeBrInsideBlock: cleanOptions.brInsideBlock,
     };
 
-    cleanDomRecursive(body);
+    const parser = new DOMParser();
+    const doc = parser.parseFromString(initialText, 'text/html');
+    const allElements = doc.body.querySelectorAll('*');
+    
+    allElements.forEach(el => {
+      if (options.removeStyles) el.removeAttribute('style');
+      if (options.removeClasses) el.removeAttribute('class');
+      if (options.removeIds) el.removeAttribute('id');
+      if (options.removeDataAttrs) {
+        Array.from(el.attributes)
+          .filter(a => a.name.startsWith('data-'))
+          .forEach(a => el.removeAttribute(a.name));
+      }
+      if (options.removeAriaAttrs) {
+        Array.from(el.attributes)
+          .filter(a => a.name.startsWith('aria-'))
+          .forEach(a => el.removeAttribute(a.name));
+      }
+      if (options.removeComments) {
+        // handled separately
+      }
+      if (options.removeOfficeMarkup) {
+        Array.from(el.attributes)
+          .filter(a => a.name.startsWith('xmlns') || a.name.startsWith('xml:'))
+          .forEach(a => el.removeAttribute(a.name));
+        if (el.tagName === 'O:P') {
+          el.replaceWith(...Array.from(el.childNodes));
+        }
+      }
+      if (options.removeLinkTarget) el.removeAttribute('target');
+      if (options.removeLinkRel) el.removeAttribute('rel');
+      if (options.removeTableAttrs && ['TABLE','TD','TH','TR'].includes(el.tagName)) {
+        ['width','height','cellpadding','cellspacing','border','align','valign']
+          .forEach(a => el.removeAttribute(a));
+      }
+      if (options.removeBrInsideBlock && el.tagName === 'BR') {
+        const parent = el.parentNode as HTMLElement | null;
+        if (parent) {
+          const parentTag = parent.tagName.toUpperCase();
+          const blockTags = ['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'LI', 'TD', 'TH'];
+          if (blockTags.includes(parentTag)) {
+            el.remove();
+          }
+        }
+      }
+      if (options.removeEmptyTags) {
+        const safe = ['LI','UL','OL','TABLE','TR','TD','TH','THEAD','TBODY','IMG','BR','HR'];
+        if (!safe.includes(el.tagName) && el.textContent.trim() === '' && el.children.length === 0) {
+          el.remove();
+        }
+      }
+    });
+    
+    if (options.removeComments) {
+      const walker = doc.createTreeWalker(doc.body, NodeFilter.SHOW_COMMENT);
+      const comments: Node[] = [];
+      let currentCommentNode = walker.nextNode();
+      while (currentCommentNode) {
+        comments.push(currentCommentNode);
+        currentCommentNode = walker.nextNode();
+      }
+      comments.forEach(c => c.parentNode?.removeChild(c));
+    }
 
-    // Serialize back using innerHTML
-    const outputHtml = body.innerHTML;
-    const finalResult = outputHtml.replace(/ {2,}/g, ' ').trim();
+    const finalResult = doc.body.innerHTML;
 
-    // The preCleanHTML is only run on the final HTML output display and counters
-    const displayResult = preCleanHTML(finalResult);
+    // 3. Write finalResult into Quill
+    if (quillRef.current) {
+      quillRef.current.root.innerHTML = finalResult;
+    }
+
+    // 4. Then immediately read BACK from Quill
+    const quillResult = quillRef.current ? quillRef.current.root.innerHTML : finalResult;
+
+    // 5. Run preCleanHTML(quillResult) only for display
+    const displayResult = preCleanHTML(quillResult);
     const formattedResult = formatHTML(displayResult);
     setDocumentHtml(formattedResult);
     calculateCounters(formattedResult);
     if (htmlTextareaRef.current) {
       htmlTextareaRef.current.value = formattedResult;
-    }
-
-    // Write pristine cleaned content (without preCleanHTML) back to Quill to retain standard editor state
-    if (quillRef.current) {
-      quillRef.current.root.innerHTML = cleanHTMLForQuill(finalResult);
     }
 
     setHasCleanedHistory(true);
