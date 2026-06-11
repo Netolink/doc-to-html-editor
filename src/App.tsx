@@ -523,6 +523,7 @@ export default function App() {
       setShowInlineSource(false);
 
       if (htmlIsDirty) {
+        // User manually edited the HTML textarea - sync that back to Quill
         setDocumentHtml(finalContent);
         setTimeout(() => {
           if (quillRef.current) {
@@ -536,9 +537,10 @@ export default function App() {
         }, 50);
         setHtmlIsDirty(false);
       } else {
-        // If not customized, keep the raw unmodified HTML of Quill to keep internal data intact
+        // Not dirty: keep Quill's internal state as-is, just update documentHtml from Quill
         if (quillRef.current) {
-          setDocumentHtml(quillRef.current.root.innerHTML);
+          const raw = quillRef.current.root.innerHTML;
+          setDocumentHtml(raw);
         }
       }
     }
@@ -978,8 +980,12 @@ export default function App() {
       return;
     }
 
-    const initialText = activeTab === 'html' && htmlTextareaRef.current ? htmlTextareaRef.current.value : documentHtml;
-    setOriginalBeforeClean(initialText);
+    // IMPORTANT: Always get raw content from Quill (not documentHtml which has formatting artifacts)
+    // If on HTML tab and user edited manually, use that. Otherwise always use Quill's raw innerHTML.
+    const initialText = (activeTab === 'html' && htmlTextareaRef.current)
+      ? htmlTextareaRef.current.value
+      : (quillRef.current ? quillRef.current.root.innerHTML : documentHtml);
+    setOriginalBeforeClean(quillRef.current ? quillRef.current.root.innerHTML : initialText);
 
     // Map the checkboxes to the options format
     const options = {
@@ -1001,6 +1007,9 @@ export default function App() {
     const doc = parser.parseFromString(initialText, 'text/html');
     const allElements = doc.body.querySelectorAll('*');
     
+    // Process elements - collect removals separately to avoid DOM mutation during iteration
+    const toRemove: Element[] = [];
+    
     allElements.forEach(el => {
       if (options.removeStyles) el.removeAttribute('style');
       if (options.removeClasses) el.removeAttribute('class');
@@ -1014,9 +1023,6 @@ export default function App() {
         Array.from(el.attributes)
           .filter(a => a.name.startsWith('aria-'))
           .forEach(a => el.removeAttribute(a.name));
-      }
-      if (options.removeComments) {
-        // handled separately
       }
       if (options.removeOfficeMarkup) {
         Array.from(el.attributes)
@@ -1038,16 +1044,29 @@ export default function App() {
           const parentTag = parent.tagName.toUpperCase();
           const blockTags = ['P', 'H1', 'H2', 'H3', 'H4', 'H5', 'H6', 'BLOCKQUOTE', 'LI', 'TD', 'TH'];
           if (blockTags.includes(parentTag)) {
-            el.remove();
+            toRemove.push(el);
           }
         }
       }
       if (options.removeEmptyTags) {
-        const safe = ['LI','UL','OL','TABLE','TR','TD','TH','THEAD','TBODY','IMG','BR','HR'];
-        if (!safe.includes(el.tagName) && el.textContent.trim() === '' && el.children.length === 0) {
-          el.remove();
+        // STRICT: only remove p and span that are completely empty (no text, no children)
+        // Never touch li, ul, ol, table, tr, td, th, h1-h6, blockquote, pre, code, img, br, hr
+        const strictSafe = ['LI','UL','OL','TABLE','TR','TD','TH','THEAD','TBODY','TFOOT',
+                           'H1','H2','H3','H4','H5','H6','BLOCKQUOTE','PRE','CODE',
+                           'IMG','BR','HR','A','STRONG','EM','B','I','U','S'];
+        const allowRemove = ['P','SPAN','DIV'];
+        if (allowRemove.includes(el.tagName) 
+            && el.textContent.trim() === '' 
+            && el.children.length === 0
+            && !el.querySelector('img,br,hr')) {
+          toRemove.push(el);
         }
       }
+    });
+    
+    // Remove collected elements (after iteration is complete)
+    toRemove.forEach(el => {
+      if (el.parentNode) el.remove();
     });
     
     if (options.removeComments) {
@@ -1063,22 +1082,21 @@ export default function App() {
 
     const finalResult = doc.body.innerHTML;
 
-    // 3. Write finalResult into Quill
+    // Write clean result back to Quill (raw, no formatting)
     if (quillRef.current) {
       quillRef.current.root.innerHTML = finalResult;
     }
 
-    // 4. Then immediately read BACK from Quill
-    const quillResult = quillRef.current ? quillRef.current.root.innerHTML : finalResult;
-
-    // 5. Run preCleanHTML(quillResult) only for display
-    const displayResult = preCleanHTML(quillResult);
+    // For display in HTML tab: run preCleanHTML then format
+    const displayResult = preCleanHTML(finalResult);
     const formattedResult = formatHTML(displayResult);
     setDocumentHtml(formattedResult);
     calculateCounters(formattedResult);
     if (htmlTextareaRef.current) {
       htmlTextareaRef.current.value = formattedResult;
     }
+    // Mark as dirty so switching back to Doc tab doesn't overwrite Quill with documentHtml
+    setHtmlIsDirty(false);
 
     setHasCleanedHistory(true);
     setShowCleanOptions(false);
