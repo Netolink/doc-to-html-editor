@@ -106,6 +106,94 @@ const cleanHTMLForQuill = (html: string): string => {
     .trim();
 };
 
+const preCleanHTML = (html: string): string => {
+  if (!html) return '';
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(`<body>${html}</body>`, 'text/html');
+  const body = doc.body;
+
+  // 1. Remove all span.ql-ui wrapper elements completely
+  body.querySelectorAll('span.ql-ui').forEach(el => el.remove());
+
+  // 2. Remove all class="ql-indent-*" classes from all elements
+  body.querySelectorAll('*').forEach(el => {
+    const classAttr = el.getAttribute('class');
+    if (classAttr) {
+      const remainingClasses = classAttr
+        .split(/\s+/)
+        .filter(cls => !cls.startsWith('ql-indent-'))
+        .join(' ');
+      if (remainingClasses) {
+        el.setAttribute('class', remainingClasses);
+      } else {
+        el.removeAttribute('class');
+      }
+    }
+  });
+
+  // 3. Convert Quill list tags to standard nested ol/ul
+  const allLis = Array.from(body.querySelectorAll('li'));
+  
+  let currentGroup: HTMLElement[] = [];
+  let currentType: string | null = null;
+  let currentParent: Node | null = null;
+
+  const wrapGroup = (liGroup: HTMLElement[], type: string) => {
+    if (liGroup.length === 0) return;
+    const firstLi = liGroup[0];
+    const parent = firstLi.parentNode;
+    if (!parent) return;
+
+    const listTag = type === 'ordered' ? 'ol' : 'ul';
+    const listContainer = document.createElement(listTag);
+
+    parent.insertBefore(listContainer, firstLi);
+
+    liGroup.forEach(li => {
+      li.removeAttribute('data-list');
+      listContainer.appendChild(li);
+    });
+  };
+
+  for (let i = 0; i < allLis.length; i++) {
+    const li = allLis[i];
+    const hasDataList = li.hasAttribute('data-list');
+    const listType = li.getAttribute('data-list');
+    const parent = li.parentNode;
+
+    if (hasDataList && listType && (listType === 'bullet' || listType === 'ordered')) {
+      if (currentGroup.length === 0) {
+        currentGroup.push(li);
+        currentType = listType;
+        currentParent = parent;
+      } else if (listType === currentType && parent === currentParent) {
+        currentGroup.push(li);
+      } else {
+        wrapGroup(currentGroup, currentType!);
+        currentGroup = [li];
+        currentType = listType;
+        currentParent = parent;
+      }
+    } else {
+      if (currentGroup.length > 0) {
+        wrapGroup(currentGroup, currentType!);
+        currentGroup = [];
+        currentType = null;
+        currentParent = null;
+      }
+    }
+  }
+
+  if (currentGroup.length > 0) {
+    wrapGroup(currentGroup, currentType!);
+  }
+
+  // Clean remaining data-list attributes anywhere to be 100% sure
+  body.querySelectorAll('[data-list]').forEach(el => el.removeAttribute('data-list'));
+
+  return body.innerHTML;
+};
+
 export default function App() {
   // State Constants
   const [activeTab, setActiveTab] = useState<'word' | 'html'>('word');
@@ -151,51 +239,37 @@ export default function App() {
   // Clean HTML options state
   const [showCleanOptions, setShowCleanOptions] = useState<boolean>(false);
   const [cleanOptions, setCleanOptions] = useState({
-    // Inline style options
-    allStyles: false,
-    fontTags: false,
-    colorAttrs: false,
-    sizeAttrs: false,
-    fontSize: false,
-    fontFamily: false,
-    bgStyles: false,
-    alignStyles: false,
-    // Structural
-    classes: false,
-    ids: false,
-    dataAttrs: false,
-    ariaAttrs: false,
-    emptyTags: false,
-    brInsideBlock: false,
-    unwrapSpans: false,
-    divWrappers: false,
-    // Comments
+    allStyles: true,
+    classes: true,
+    ids: true,
+    dataAttrs: true,
+    ariaAttrs: true,
     comments: true,
-    metaTags: true,
-    styleBlocks: true,
-    scripts: true,
-    // Word
-    msoStyles: true,
-    xmlnsAttrs: true,
-    opTags: true,
-    conditionalComments: true,
-    // Google docs
-    gdocsClasses: true,
-    gdocsB: true,
-    // Links
-    removeHrefs: false,
-    removeLinks: false,
-    removeTargets: false,
-    removeRels: false,
-    // Tables
-    tableDims: false,
-    tableBorders: false,
-    tableStyles: false,
-    // Whitespace
-    spaces: true,
-    blankLines: false,
-    trimTags: false,
+    emptyTags: true,
+    brInsideBlock: true,
+    removeTargets: true,
+    removeRels: true,
+    tableAttrs: true,
+    officeGdocsMarkup: true,
   });
+
+  const toggleAllCheckboxes = () => {
+    const allChecked = Object.values(cleanOptions).every(Boolean);
+    setCleanOptions({
+      allStyles: !allChecked,
+      classes: !allChecked,
+      ids: !allChecked,
+      dataAttrs: !allChecked,
+      ariaAttrs: !allChecked,
+      comments: !allChecked,
+      emptyTags: !allChecked,
+      brInsideBlock: !allChecked,
+      removeTargets: !allChecked,
+      removeRels: !allChecked,
+      tableAttrs: !allChecked,
+      officeGdocsMarkup: !allChecked,
+    });
+  };
 
   // UI Toast indicators
   const [toastText, setToastText] = useState<string>('');
@@ -210,6 +284,10 @@ export default function App() {
   const tablePickerRef = useRef<HTMLDivElement>(null);
   const cleanPanelRef = useRef<HTMLDivElement>(null);
   const tableContextMenuRef = useRef<HTMLDivElement>(null);
+  
+  // Tracking if HTML has actually been edited by user to avoid corrupting Quill structures
+  const [htmlIsDirty, setHtmlIsDirty] = useState<boolean>(false);
+  const inlineSourceOriginalRef = useRef<string>('');
 
   // Trigger Toast Notification
   const triggerToast = (msg: string) => {
@@ -410,8 +488,9 @@ export default function App() {
   const handleWordInput = () => {
     if (quillRef.current) {
       const content = quillRef.current.root.innerHTML;
-      setDocumentHtml(content);
-      calculateCounters(content);
+      const sanitized = preCleanHTML(content);
+      setDocumentHtml(sanitized);
+      calculateCounters(sanitized);
     }
   };
 
@@ -429,30 +508,40 @@ export default function App() {
         finalContent = editorRef.current.innerHTML;
       }
       
-      const formattedHTML = formatHTML(finalContent);
+      const sanitized = preCleanHTML(finalContent);
+      const formattedHTML = formatHTML(sanitized);
       setDocumentHtml(formattedHTML);
       calculateCounters(formattedHTML);
+      setHtmlIsDirty(false); // reset edit tracker when entering HTML tab
       setActiveTab(tab);
     } else {
       // Sync from HTML Tab back to WYSIWYG
       let finalContent = documentHtml;
       if (htmlTextareaRef.current) {
         finalContent = htmlTextareaRef.current.value;
-        setDocumentHtml(finalContent);
       }
       setActiveTab(tab);
       setShowInlineSource(false);
 
-      setTimeout(() => {
-        if (quillRef.current) {
-          const cleaned = cleanHTMLForQuill(finalContent);
-          const currentNorm = normalizeHTML(quillRef.current.root.innerHTML);
-          const newNorm = normalizeHTML(cleaned);
-          if (currentNorm !== newNorm) {
-            quillRef.current.root.innerHTML = cleaned;
+      if (htmlIsDirty) {
+        setDocumentHtml(finalContent);
+        setTimeout(() => {
+          if (quillRef.current) {
+            const cleaned = cleanHTMLForQuill(finalContent);
+            const currentNorm = normalizeHTML(quillRef.current.root.innerHTML);
+            const newNorm = normalizeHTML(cleaned);
+            if (currentNorm !== newNorm) {
+              quillRef.current.root.innerHTML = cleaned;
+            }
           }
+        }, 50);
+        setHtmlIsDirty(false);
+      } else {
+        // If not customized, keep the raw unmodified HTML of Quill to keep internal data intact
+        if (quillRef.current) {
+          setDocumentHtml(quillRef.current.root.innerHTML);
         }
-      }, 50);
+      }
     }
   };
 
@@ -865,349 +954,211 @@ export default function App() {
   // Reset checkboxes to prompt-friendly defaults
   const resetCheckboxes = () => {
     setCleanOptions({
-      allStyles: false,
-      fontTags: false,
-      colorAttrs: false,
-      sizeAttrs: false,
-      fontSize: false,
-      fontFamily: false,
-      bgStyles: false,
-      alignStyles: false,
-      classes: false,
-      ids: false,
-      dataAttrs: false,
-      ariaAttrs: false,
-      emptyTags: false,
-      brInsideBlock: false,
-      unwrapSpans: false,
-      divWrappers: false,
+      allStyles: true,
+      classes: true,
+      ids: true,
+      dataAttrs: true,
+      ariaAttrs: true,
       comments: true,
-      metaTags: true,
-      styleBlocks: true,
-      scripts: true,
-      msoStyles: true,
-      xmlnsAttrs: true,
-      opTags: true,
-      conditionalComments: true,
-      gdocsClasses: true,
-      gdocsB: true,
-      removeHrefs: false,
-      removeLinks: false,
-      removeTargets: false,
-      removeRels: false,
-      tableDims: false,
-      tableBorders: false,
-      tableStyles: false,
-      spaces: true,
-      blankLines: false,
-      trimTags: false,
+      emptyTags: true,
+      brInsideBlock: true,
+      removeTargets: true,
+      removeRels: true,
+      tableAttrs: true,
+      officeGdocsMarkup: true,
     });
   };
 
   // Apply Clean Engine HTML parser
   const runHTMLCleaning = () => {
+    // Check if any checkbox is selected. If zero checkboxes are selected, do absolutely nothing.
+    const hasAnyOptionSelected = Object.values(cleanOptions).some(val => val === true);
+    if (!hasAnyOptionSelected) {
+      triggerToast("No cleanup options selected. No changes made.");
+      setShowCleanOptions(false);
+      return;
+    }
+
     const initialText = activeTab === 'html' && htmlTextareaRef.current ? htmlTextareaRef.current.value : documentHtml;
     setOriginalBeforeClean(initialText);
 
-    // Initialize HTML Parsing traversers
+    const optAllStyles = cleanOptions.allStyles;
+    const optClasses = cleanOptions.classes;
+    const optIds = cleanOptions.ids;
+    const optDataAttrs = cleanOptions.dataAttrs;
+    const optAriaAttrs = cleanOptions.ariaAttrs;
+    const optComments = cleanOptions.comments;
+    const optEmptyTags = cleanOptions.emptyTags;
+    const optRemoveTargets = cleanOptions.removeTargets;
+    const optRemoveRels = cleanOptions.removeRels;
+    const optTableAttrs = cleanOptions.tableAttrs;
+    const optOfficeGDocs = cleanOptions.officeGdocsMarkup;
+
+    // Use DOMParser as requested
     const parser = new DOMParser();
-    const doc = parser.parseFromString(`<body>${initialText}bodyhtml_anchor_node</body>`, 'text/html');
+    const doc = parser.parseFromString(initialText, 'text/html');
     const body = doc.body;
 
-    // Comments, Style blocks, Scripts inside body
-    if (cleanOptions.metaTags) {
-      body.querySelectorAll('meta, link, title').forEach(el => el.remove());
-    }
-    if (cleanOptions.styleBlocks) {
-      body.querySelectorAll('style').forEach(el => el.remove());
-    }
-    if (cleanOptions.scripts) {
-      body.querySelectorAll('script, noscript, iframe').forEach(el => el.remove());
-    }
-    if (cleanOptions.opTags) {
-      body.querySelectorAll('o\\:p, w\\:wrap, smarttag, *[name*="office"]').forEach(el => {
-        const range = document.createRange();
-        range.selectNodeContents(el);
-        el.parentNode?.replaceChild(range.extractContents(), el);
-      });
-    }
-
-    // Quill-specific improvements: remove all ql-ui elements entirely,
-    // convert list nodes to standard ul/ol structure with li tags,
-    // and remove all data-list attributes.
-    body.querySelectorAll('span.ql-ui').forEach(el => el.remove());
-
-    body.querySelectorAll('li[data-list]').forEach(li => {
-      const listType = li.getAttribute('data-list'); // 'ordered' or 'bullet'
-      const parent = li.parentNode as HTMLElement;
-      const parentTag = parent?.tagName.toLowerCase();
-      const correctParentTag = listType === 'ordered' ? 'ol' : 'ul';
-      
-      if (!parent || parentTag !== correctParentTag) {
-        if (parent && (parentTag === 'ol' || parentTag === 'ul')) {
-          const listContainer = document.createElement(correctParentTag);
-          parent.parentNode?.insertBefore(listContainer, parent);
-          listContainer.appendChild(li);
-        } else {
-          const listContainer = document.createElement(correctParentTag);
-          li.parentNode?.insertBefore(listContainer, li);
-          listContainer.appendChild(li);
-        }
+    // Recursive traversal to safely strip attributes without changing elements/unwrap
+    const cleanDomRecursive = (node: Node) => {
+      const children = Array.from(node.childNodes);
+      for (const child of children) {
+        cleanDomRecursive(child);
       }
-    });
 
-    body.querySelectorAll('ol, ul').forEach(list => {
-      let next = list.nextSibling;
-      while (next && next.nodeType === 1 && (next as HTMLElement).tagName.toLowerCase() === list.tagName.toLowerCase()) {
-        const nextList = next as HTMLElement;
-        while (nextList.firstChild) {
-          list.appendChild(nextList.firstChild);
+      // Process Comments (nodeType === 8)
+      if (node.nodeType === 8) {
+        if (optComments || optOfficeGDocs) {
+          node.parentNode?.removeChild(node);
         }
-        const toRemove = nextList;
-        next = nextList.nextSibling;
-        toRemove.remove();
+        return;
       }
-    });
 
-    body.querySelectorAll('[data-list]').forEach(el => {
-      el.removeAttribute('data-list');
-    });
-
-    // Traverse recursively
-    const traverseElementNode = (node: Node | null) => {
-      if (!node) return;
-
-      if (node.nodeType === 1) { // Node element
+      // Process Elements (nodeType === 1)
+      if (node.nodeType === 1) {
         const el = node as HTMLElement;
         const tag = el.tagName.toLowerCase();
 
-        // Unwrap standard wrappers
-        if (cleanOptions.fontTags && tag === 'font') {
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          el.parentNode?.replaceChild(range.extractContents(), el);
-          traverseElementNode(node.parentNode);
-          return;
-        }
-
-        if (cleanOptions.unwrapSpans && tag === 'span') {
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          el.parentNode?.replaceChild(range.extractContents(), el);
-          traverseElementNode(node.parentNode);
-          return;
-        }
-
-        if (cleanOptions.divWrappers && tag === 'div') {
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          el.parentNode?.replaceChild(range.extractContents(), el);
-          traverseElementNode(node.parentNode);
-          return;
-        }
-
-        // Anchor Links
-        if (tag === 'a') {
-          if (cleanOptions.removeLinks) {
-            const range = document.createRange();
-            range.selectNodeContents(el);
-            el.parentNode?.replaceChild(range.extractContents(), el);
-            traverseElementNode(node.parentNode);
-            return;
-          }
-          if (cleanOptions.removeHrefs) {
-            el.removeAttribute('href');
-          }
-          if (cleanOptions.removeTargets) {
-            el.removeAttribute('target');
-          }
-          if (cleanOptions.removeRels) {
-            el.removeAttribute('rel');
-          }
-        }
-
-        // Google Docs bold normal spans
-        if (cleanOptions.gdocsB && tag === 'b' && el.style.fontWeight === 'normal') {
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          el.parentNode?.replaceChild(range.extractContents(), el);
-          traverseElementNode(node.parentNode);
-          return;
-        }
-
-        // Office mso tags
-        if (cleanOptions.opTags && tag.includes(':')) {
-          const range = document.createRange();
-          range.selectNodeContents(el);
-          el.parentNode?.replaceChild(range.extractContents(), el);
-          traverseElementNode(node.parentNode);
-          return;
-        }
-
-        // Style attribute stripping
-        if (cleanOptions.allStyles) {
+        // 1. Remove style-related attributes if optAllStyles is checked
+        if (optAllStyles) {
           el.removeAttribute('style');
-        } else {
-          const style = el.getAttribute('style') || '';
-          if (style) {
-            let declarations = style.split(';').map(d => d.trim()).filter(Boolean);
-
-            if (cleanOptions.fontSize) {
-              declarations = declarations.filter(d => !d.toLowerCase().startsWith('font-size'));
-            }
-            if (cleanOptions.fontFamily) {
-              declarations = declarations.filter(d => !d.toLowerCase().startsWith('font-family'));
-            }
-            if (cleanOptions.bgStyles) {
-              declarations = declarations.filter(d => !d.toLowerCase().startsWith('background-color') && !d.toLowerCase().startsWith('background'));
-            }
-            if (cleanOptions.alignStyles) {
-              declarations = declarations.filter(d => !d.toLowerCase().startsWith('text-align'));
-            }
-            if (cleanOptions.msoStyles) {
-              declarations = declarations.filter(d => !d.toLowerCase().startsWith('mso-'));
-            }
-            if (cleanOptions.tableStyles && ['table', 'tr', 'td', 'th'].includes(tag)) {
-              declarations = [];
-            }
-
-            if (declarations.length > 0) {
-              el.setAttribute('style', declarations.join('; '));
+          el.removeAttribute('color');
+          el.removeAttribute('size');
+          el.removeAttribute('face');
+        } else if (optOfficeGDocs) {
+          // Remove Microsoft-specific mso- properties from style attribute without removing style entirely
+          const styleAttr = el.getAttribute('style');
+          if (styleAttr) {
+            const cleanStyle = styleAttr
+              .split(';')
+              .map(part => part.trim())
+              .filter(part => {
+                if (!part) return false;
+                return !part.toLowerCase().startsWith('mso-');
+              })
+              .join('; ');
+            if (cleanStyle) {
+              el.setAttribute('style', cleanStyle);
             } else {
               el.removeAttribute('style');
             }
           }
         }
 
-        // Base Classes / Id Cleanups
-        if (cleanOptions.classes) {
+        // 2. Remove class attributes
+        if (optClasses) {
           el.removeAttribute('class');
-        } else if (cleanOptions.gdocsClasses) {
-          const cls = el.getAttribute('class') || '';
-          if (cls.includes('docs-internal-guid')) {
+        } else if (optOfficeGDocs) {
+          const cls = el.getAttribute('class');
+          if (cls && cls.includes('docs-internal-guid')) {
             el.removeAttribute('class');
           }
         }
 
-        if (cleanOptions.ids) {
+        // 3. Remove ID attributes
+        if (optIds) {
           el.removeAttribute('id');
-        } else if (cleanOptions.gdocsClasses) {
-          const checkId = el.getAttribute('id') || '';
-          if (checkId.startsWith('docs-internal-guid')) {
+        } else if (optOfficeGDocs) {
+          const idVal = el.getAttribute('id');
+          if (idVal && idVal.startsWith('docs-internal-guid')) {
             el.removeAttribute('id');
           }
         }
 
-        if (cleanOptions.colorAttrs) el.removeAttribute('color');
-        if (cleanOptions.sizeAttrs) el.removeAttribute('size');
-
-        if (cleanOptions.dataAttrs) {
-          Array.from(el.attributes).forEach(attr => {
-            if (attr.name.startsWith('data-')) el.removeAttribute(attr.name);
-          });
+        // 4. Remove data-* attributes
+        if (optDataAttrs) {
+          const attrsToRemove: string[] = [];
+          for (let i = 0; i < el.attributes.length; i++) {
+            const name = el.attributes[i].name;
+            if (name.startsWith('data-')) {
+              attrsToRemove.push(name);
+            }
+          }
+          attrsToRemove.forEach(name => el.removeAttribute(name));
         }
 
-        if (cleanOptions.ariaAttrs) {
-          Array.from(el.attributes).forEach(attr => {
-            if (attr.name.startsWith('aria-')) el.removeAttribute(attr.name);
-          });
+        // 5. Remove aria-* attributes
+        if (optAriaAttrs) {
+          const attrsToRemove: string[] = [];
+          for (let i = 0; i < el.attributes.length; i++) {
+            const name = el.attributes[i].name;
+            if (name.startsWith('aria-')) {
+              attrsToRemove.push(name);
+            }
+          }
+          attrsToRemove.forEach(name => el.removeAttribute(name));
         }
 
-        if (cleanOptions.xmlnsAttrs) {
+        // 6. Remove target and rel from links
+        if (tag === 'a') {
+          if (optRemoveTargets) {
+            el.removeAttribute('target');
+          }
+          if (optRemoveRels) {
+            el.removeAttribute('rel');
+          }
+        }
+
+        // 7. Remove table attributes
+        if (optTableAttrs && ['table', 'tr', 'td', 'th', 'thead', 'tbody'].includes(tag)) {
+          el.removeAttribute('width');
+          el.removeAttribute('height');
+          el.removeAttribute('cellpadding');
+          el.removeAttribute('cellspacing');
+          el.removeAttribute('border');
+        }
+
+        // 8. Remove Office/GDocs markup namespace attributes
+        if (optOfficeGDocs) {
           el.removeAttribute('xmlns');
           el.removeAttribute('xmlns:o');
           el.removeAttribute('xmlns:w');
           el.removeAttribute('xml:lang');
+
+          const officeAttrs: string[] = [];
+          for (let i = 0; i < el.attributes.length; i++) {
+            const name = el.attributes[i].name;
+            if (name.includes(':')) {
+              officeAttrs.push(name);
+            }
+          }
+          officeAttrs.forEach(name => el.removeAttribute(name));
         }
 
-        // Tables Width / Height / Borders
-        if (['table', 'tr', 'td', 'th'].includes(tag)) {
-          if (cleanOptions.tableDims) {
-            el.removeAttribute('width');
-            el.removeAttribute('height');
-            el.removeAttribute('cellpadding');
-            el.removeAttribute('cellspacing');
+        // 9. Remove empty elements only (never touch other elements or its text content)
+        if (optEmptyTags) {
+          const NEVER_REMOVE_TAGS = ['li', 'ul', 'ol', 'td', 'th', 'tr', 'table', 'thead', 'tbody', 'body', 'html'];
+          if (!NEVER_REMOVE_TAGS.includes(tag)) {
+            const hasImgBrHr = el.querySelector('img, br, hr') !== null;
+            if (el.textContent?.trim() === '' && !hasImgBrHr) {
+              el.parentNode?.removeChild(el);
+              return;
+            }
           }
-          if (cleanOptions.tableBorders) {
-            el.removeAttribute('border');
-          }
-        }
-
-        // <br> tags inside standard blocks
-        if (cleanOptions.brInsideBlock && tag === 'br') {
-          const parent = el.parentNode as HTMLElement;
-          if (parent && ['p', 'h1', 'h2', 'h3', 'h4', 'blockquote', 'li'].includes(parent.tagName.toLowerCase())) {
-            el.remove();
-            return;
-          }
-        }
-
-        // Trim tag whitespace
-        if (cleanOptions.trimTags) {
-          if (el.childNodes.length === 1 && el.firstChild?.nodeType === 3) {
-            el.firstChild.nodeValue = (el.firstChild.nodeValue || '').trim();
-          }
-        }
-      }
-
-      // Safe child recursion
-      let childNode = node.firstChild;
-      while (childNode) {
-        const next = childNode.nextSibling;
-        traverseElementNode(childNode);
-        childNode = next;
-      }
-
-      // Post empty tag stripping
-      if (node.nodeType === 1 && cleanOptions.emptyTags) {
-        const el = node as HTMLElement;
-        const tag = el.tagName.toLowerCase();
-        const preservations = ['body', 'html', 'img', 'br', 'hr', 'td', 'th', 'tr', 'table'];
-        if (!preservations.includes(tag) && el.innerHTML.trim() === '') {
-          el.remove();
         }
       }
     };
 
-    traverseElementNode(body);
+    cleanDomRecursive(body);
 
-    let outputHtml = body.innerHTML;
-    outputHtml = outputHtml.replace('bodyhtml_anchor_node', '');
+    // Serialize back using innerHTML
+    const outputHtml = body.innerHTML;
+    const finalResult = outputHtml.replace(/ {2,}/g, ' ').trim();
 
-    // Raw regex pass
-    if (cleanOptions.conditionalComments) {
-      outputHtml = outputHtml.replace(/<!--\[if[\s\S]*?<!\[endif\]-->/gi, '');
-    }
-    if (cleanOptions.comments) {
-      outputHtml = outputHtml.replace(/<!--[\s\S]*?-->/gi, '');
-    }
-    if (cleanOptions.spaces) {
-      outputHtml = outputHtml.replace(/ {2,}/g, ' ');
-    }
-    if (cleanOptions.blankLines) {
-      outputHtml = outputHtml.replace(/(<p>\s*(&nbsp;)?\s*<\/p>\s*){3,}/gi, '<p>&nbsp;</p>\n<p>&nbsp;</p>');
-      outputHtml = outputHtml.replace(/(<br\s*\/?>\s*){3,}/gi, '<br><br>');
+    // The preCleanHTML is only run on the final HTML output display and counters
+    const displayResult = preCleanHTML(finalResult);
+    const formattedResult = formatHTML(displayResult);
+    setDocumentHtml(formattedResult);
+    calculateCounters(formattedResult);
+    if (htmlTextareaRef.current) {
+      htmlTextareaRef.current.value = formattedResult;
     }
 
-    const finalResult = outputHtml.trim();
+    // Write pristine cleaned content (without preCleanHTML) back to Quill to retain standard editor state
     if (quillRef.current) {
-      quillRef.current.clipboard.dangerouslyPasteHTML(finalResult);
-      // Retrieve the parsed and normalized clean HTML back from Quill
-      const syncedHtml = quillRef.current.root.innerHTML;
-      const formattedResult = formatHTML(syncedHtml);
-      setDocumentHtml(formattedResult);
-      calculateCounters(formattedResult);
-      if (htmlTextareaRef.current) {
-        htmlTextareaRef.current.value = formattedResult;
-      }
-    } else {
-      const formattedResult = formatHTML(finalResult);
-      setDocumentHtml(formattedResult);
-      calculateCounters(formattedResult);
-      if (htmlTextareaRef.current) {
-        htmlTextareaRef.current.value = formattedResult;
-      }
+      quillRef.current.root.innerHTML = cleanHTMLForQuill(finalResult);
     }
+
     setHasCleanedHistory(true);
     setShowCleanOptions(false);
     triggerToast("Applied advanced DOM cleanup parameters successfully!");
@@ -1245,14 +1196,16 @@ export default function App() {
       codeContent = textareaRef.current.value;
     }
 
-    navigator.clipboard.writeText(codeContent).then(() => {
+    const cleanOutput = preCleanHTML(codeContent);
+    navigator.clipboard.writeText(cleanOutput).then(() => {
       triggerToast("HTML copied to Clipboard!");
     });
   };
 
   const handleCopyText = () => {
     const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = documentHtml;
+    const cleanOutput = preCleanHTML(documentHtml);
+    tempDiv.innerHTML = cleanOutput;
     const txt = tempDiv.textContent || tempDiv.innerText || '';
     
     navigator.clipboard.writeText(txt.trim()).then(() => {
@@ -1262,7 +1215,8 @@ export default function App() {
 
   // Downloads files hooks
   const downloadHtmlDocument = () => {
-    const blob = new Blob([documentHtml], { type: 'text/html;charset=utf-8;' });
+    const cleanOutput = preCleanHTML(documentHtml);
+    const blob = new Blob([cleanOutput], { type: 'text/html;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement("a");
     link.href = url;
@@ -1275,7 +1229,8 @@ export default function App() {
 
   const downloadTextDocument = () => {
     const tempDiv = document.createElement('div');
-    tempDiv.innerHTML = documentHtml;
+    const cleanOutput = preCleanHTML(documentHtml);
+    tempDiv.innerHTML = cleanOutput;
     const txt = tempDiv.textContent || tempDiv.innerText || '';
 
     const blob = new Blob([txt], { type: 'text/plain;charset=utf-8;' });
@@ -1532,21 +1487,25 @@ export default function App() {
                   id="source-inline-toggle"
                   onClick={() => {
                     if (showInlineSource && textareaRef.current) {
-                      // Save text
                       const htmlVal = textareaRef.current.value;
-                      setDocumentHtml(htmlVal);
-                      if (quillRef.current) {
+                      if (htmlVal !== inlineSourceOriginalRef.current) {
                         const cleaned = cleanHTMLForQuill(htmlVal);
-                        const currentNorm = normalizeHTML(quillRef.current.root.innerHTML);
-                        const newNorm = normalizeHTML(cleaned);
-                        if (currentNorm !== newNorm) {
+                        setDocumentHtml(cleaned);
+                        if (quillRef.current) {
                           quillRef.current.root.innerHTML = cleaned;
+                        }
+                      } else {
+                        // Restore raw Quill content
+                        if (quillRef.current) {
+                          setDocumentHtml(quillRef.current.root.innerHTML);
                         }
                       }
                     } else {
                       // Formatting before entering inline editor
                       const currentVal = quillRef.current ? quillRef.current.root.innerHTML : documentHtml;
-                      const formatted = formatHTML(currentVal);
+                      const sanitized = preCleanHTML(currentVal);
+                      const formatted = formatHTML(sanitized);
+                      inlineSourceOriginalRef.current = formatted;
                       setDocumentHtml(formatted);
                     }
                     setShowInlineSource(!showInlineSource);
@@ -1667,396 +1626,247 @@ export default function App() {
                   >
                     <ChevronDown className="w-3.5 h-3.5" />
                     Clean HTML Options
-                  </button>
-
-                  {showCleanOptions && (
+                  </button>                  {showCleanOptions && (
                     <div id="clean-options-card-popover" className="absolute right-0 mt-2 w-[420px] max-w-[calc(100vw-2.5rem)] bg-white border border-[#dee2e6] rounded-lg shadow-2xl z-50 text-xs text-left overflow-hidden flex flex-col">
                       
                       <div className="bg-gray-50 px-4 py-2.5 border-b border-gray-200 flex justify-between items-center select-none">
                         <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Advanced Clean Options</span>
-                        <span className="text-[10px] text-gray-400 uppercase font-mono font-bold bg-white px-1.5 py-0.5 rounded border border-gray-200 shadow-sm">Native Traversal</span>
+                        <button
+                          onClick={toggleAllCheckboxes}
+                          className="px-2 py-1 bg-white hover:bg-gray-100 text-gray-750 font-semibold rounded border border-gray-300 text-[10px] transition cursor-pointer"
+                        >
+                          {Object.values(cleanOptions).every(Boolean) ? 'Deselect All' : 'Select All'}
+                        </button>
                       </div>
 
                       {/* Scroller parameters checklists */}
-                      <div className="p-4 max-h-[300px] overflow-y-auto space-y-3.5">
+                      <div className="p-4 max-h-[380px] overflow-y-auto space-y-4">
                         
-                        {/* 1. Inline Styles */}
-                        <div>
-                          <p className="font-bold text-gray-500 mb-2 bg-gray-50 py-1 px-2 rounded text-[10px] uppercase tracking-wide">Inline styles & formatting</p>
-                          <div className="grid grid-cols-1 gap-2 pl-1">
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.allStyles}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, allStyles: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove all style="" attributes
+                        {/* 1. Office & Google Docs Markup */}
+                        <div className="flex items-start gap-3">
+                          <input 
+                            type="checkbox" 
+                            id="check-office-gdocs"
+                            checked={cleanOptions.officeGdocsMarkup}
+                            onChange={(e) => setCleanOptions(prev => ({ ...prev, officeGdocsMarkup: e.target.checked }))}
+                            className="accent-[#2c7be5] h-4 w-4 mt-0.5 rounded border-gray-300 cursor-pointer shrink-0" 
+                          />
+                          <div>
+                            <label htmlFor="check-office-gdocs" className="font-bold text-gray-700 hover:text-gray-900 cursor-pointer block text-xs">
+                              Office & Google Docs Markup
                             </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.fontTags}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, fontTags: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove &lt;font&gt; tags
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.colorAttrs}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, colorAttrs: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove color attributes
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.sizeAttrs}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, sizeAttrs: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove size attributes
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.fontSize}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, fontSize: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove inline font-size declarations
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.fontFamily}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, fontFamily: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove inline font-family declarations
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.bgStyles}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, bgStyles: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove background-color styles
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.alignStyles}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, alignStyles: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove text-align styles
-                            </label>
+                            <p className="text-gray-500 text-[11px] leading-normal font-sans">
+                              Microsoft mso- properties, o:p tags, conditional comments, and Google Docs specific ids/injected tags.
+                            </p>
                           </div>
                         </div>
 
-                        {/* 2. Structural */}
-                        <div>
-                          <p className="font-bold text-gray-500 mb-2 bg-gray-50 py-1 px-2 rounded text-[10px] uppercase tracking-wide">Structural cleanup</p>
-                          <div className="grid grid-cols-1 gap-2 pl-1">
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.classes}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, classes: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove all class="" attributes
+                        {/* 2. Remove style="" attributes */}
+                        <div className="flex items-start gap-3">
+                          <input 
+                            type="checkbox" 
+                            id="check-all-styles"
+                            checked={cleanOptions.allStyles}
+                            onChange={(e) => setCleanOptions(prev => ({ ...prev, allStyles: e.target.checked }))}
+                            className="accent-[#2c7be5] h-4 w-4 mt-0.5 rounded border-gray-300 cursor-pointer shrink-0" 
+                          />
+                          <div>
+                            <label htmlFor="check-all-styles" className="font-bold text-gray-700 hover:text-gray-900 cursor-pointer block text-xs">
+                              Remove style="" attributes
                             </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.ids}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, ids: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove all id="" attributes
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.dataAttrs}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, dataAttrs: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove all data-* attributes
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.ariaAttrs}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, ariaAttrs: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove all aria-* attributes
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.emptyTags}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, emptyTags: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove empty tags (p, span, div)
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.brInsideBlock}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, brInsideBlock: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove &lt;br&gt; tags inside block elements
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.unwrapSpans}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, unwrapSpans: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Unwrap &lt;span&gt; tags (keep text)
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.divWrappers}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, divWrappers: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove &lt;div&gt; wrappers
-                            </label>
+                            <p className="text-gray-500 text-[11px] leading-normal font-sans">
+                              Strips all inline styles and styling tags from HTML elements.
+                            </p>
                           </div>
                         </div>
 
-                        {/* 3. Comments */}
-                        <div>
-                          <p className="font-bold text-gray-500 mb-2 bg-gray-50 py-1 px-2 rounded text-[10px] uppercase tracking-wide">Comments & metadata</p>
-                          <div className="grid grid-cols-1 gap-2 pl-1">
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.comments}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, comments: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
+                        {/* 3. Remove class="" attributes */}
+                        <div className="flex items-start gap-3">
+                          <input 
+                            type="checkbox" 
+                            id="check-classes"
+                            checked={cleanOptions.classes}
+                            onChange={(e) => setCleanOptions(prev => ({ ...prev, classes: e.target.checked }))}
+                            className="accent-[#2c7be5] h-4 w-4 mt-0.5 rounded border-gray-300 cursor-pointer shrink-0" 
+                          />
+                          <div>
+                            <label htmlFor="check-classes" className="font-bold text-gray-700 hover:text-gray-900 cursor-pointer block text-xs">
+                              Remove class="" attributes
+                            </label>
+                            <p className="text-gray-500 text-[11px] leading-normal font-sans">
+                              Strips class names from all HTML elements.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* 4. Remove id="" attributes */}
+                        <div className="flex items-start gap-3">
+                          <input 
+                            type="checkbox" 
+                            id="check-ids"
+                            checked={cleanOptions.ids}
+                            onChange={(e) => setCleanOptions(prev => ({ ...prev, ids: e.target.checked }))}
+                            className="accent-[#2c7be5] h-4 w-4 mt-0.5 rounded border-gray-300 cursor-pointer shrink-0" 
+                          />
+                          <div>
+                            <label htmlFor="check-ids" className="font-bold text-gray-700 hover:text-gray-900 cursor-pointer block text-xs">
+                              Remove id="" attributes
+                            </label>
+                            <p className="text-gray-500 text-[11px] leading-normal font-sans">
+                              Strips unique element IDs from all tags.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* 5. Remove data-* attributes */}
+                        <div className="flex items-start gap-3">
+                          <input 
+                            type="checkbox" 
+                            id="check-data-attrs"
+                            checked={cleanOptions.dataAttrs}
+                            onChange={(e) => setCleanOptions(prev => ({ ...prev, dataAttrs: e.target.checked }))}
+                            className="accent-[#2c7be5] h-4 w-4 mt-0.5 rounded border-gray-300 cursor-pointer shrink-0" 
+                          />
+                          <div>
+                            <label htmlFor="check-data-attrs" className="font-bold text-gray-700 hover:text-gray-900 cursor-pointer block text-xs">
+                              Remove data-* attributes
+                            </label>
+                            <p className="text-gray-500 text-[11px] leading-normal font-sans">
+                              Removes all custom data storage attributes (e.g., data-list-item).
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* 6. Remove aria-* attributes */}
+                        <div className="flex items-start gap-3">
+                          <input 
+                            type="checkbox" 
+                            id="check-aria-attrs"
+                            checked={cleanOptions.ariaAttrs}
+                            onChange={(e) => setCleanOptions(prev => ({ ...prev, ariaAttrs: e.target.checked }))}
+                            className="accent-[#2c7be5] h-4 w-4 mt-0.5 rounded border-gray-300 cursor-pointer shrink-0" 
+                          />
+                          <div>
+                            <label htmlFor="check-aria-attrs" className="font-bold text-gray-700 hover:text-gray-900 cursor-pointer block text-xs">
+                              Remove aria-* attributes
+                            </label>
+                            <p className="text-gray-500 text-[11px] leading-normal font-sans">
+                              Removes accessibility annotations from all tags.
+                            </p>
+                          </div>
+                        </div>
+
+                        {/* 7. Remove HTML comments */}
+                        <div className="flex items-start gap-3">
+                          <input 
+                            type="checkbox" 
+                            id="check-comments"
+                            checked={cleanOptions.comments}
+                            onChange={(e) => setCleanOptions(prev => ({ ...prev, comments: e.target.checked }))}
+                            className="accent-[#2c7be5] h-4 w-4 mt-0.5 rounded border-gray-300 cursor-pointer shrink-0" 
+                          />
+                          <div>
+                            <label htmlFor="check-comments" className="font-bold text-gray-700 hover:text-gray-900 cursor-pointer block text-xs">
                               Remove HTML comments
                             </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.metaTags}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, metaTags: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove &lt;meta&gt; elements
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.styleBlocks}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, styleBlocks: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove embed &lt;style&gt; blocks
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.scripts}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, scripts: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove &lt;script&gt; code tags
-                            </label>
+                            <p className="text-gray-500 text-[11px] leading-normal font-sans">
+                              Removes regular HTML developer comments.
+                            </p>
                           </div>
                         </div>
 
-                        {/* 4. MS Office */}
-                        <div>
-                          <p className="font-bold text-gray-500 mb-2 bg-gray-50 py-1 px-2 rounded text-[10px] uppercase tracking-wide">Microsoft Office cleanup</p>
-                          <div className="grid grid-cols-1 gap-2 pl-1">
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.msoStyles}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, msoStyles: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove custom mso-* inline styles
+                        {/* 8. Remove empty tags */}
+                        <div className="flex items-start gap-3">
+                          <input 
+                            type="checkbox" 
+                            id="check-empty-tags"
+                            checked={cleanOptions.emptyTags}
+                            onChange={(e) => setCleanOptions(prev => ({ ...prev, emptyTags: e.target.checked }))}
+                            className="accent-[#2c7be5] h-4 w-4 mt-0.5 rounded border-gray-300 cursor-pointer shrink-0" 
+                          />
+                          <div>
+                            <label htmlFor="check-empty-tags" className="font-bold text-gray-700 hover:text-gray-900 cursor-pointer block text-xs">
+                              Remove empty tags
                             </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.xmlnsAttrs}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, xmlnsAttrs: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove xmlns / xml:lang schemas
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.opTags}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, opTags: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove &lt;o:p&gt; other Office namespaces
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.conditionalComments}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, conditionalComments: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove Word conditional comments
-                            </label>
+                            <p className="text-gray-550 text-[11px] leading-normal font-sans">
+                              Only deletes empty &lt;p&gt;&lt;/p&gt; and &lt;span&gt;&lt;/span&gt; tags with no content. Never removes structural tags.
+                            </p>
                           </div>
                         </div>
 
-                        {/* 5. Google Docs */}
-                        <div>
-                          <p className="font-bold text-gray-500 mb-2 bg-gray-50 py-1 px-2 rounded text-[10px] uppercase tracking-wide">Google Docs cleanup</p>
-                          <div className="grid grid-cols-1 gap-2 pl-1">
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.gdocsClasses}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, gdocsClasses: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove Google Docs guid classes/id properties
+                        {/* 9. Remove <br> inside block elements */}
+                        <div className="flex items-start gap-3">
+                          <input 
+                            type="checkbox" 
+                            id="check-br-block"
+                            checked={cleanOptions.brInsideBlock}
+                            onChange={(e) => setCleanOptions(prev => ({ ...prev, brInsideBlock: e.target.checked }))}
+                            className="accent-[#2c7be5] h-4 w-4 mt-0.5 rounded border-gray-300 cursor-pointer shrink-0" 
+                          />
+                          <div>
+                            <label htmlFor="check-br-block" className="font-bold text-gray-700 hover:text-gray-900 cursor-pointer block text-xs">
+                              Remove &lt;br&gt; inside block elements
                             </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.gdocsB}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, gdocsB: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove unwrapping docs &lt;b&gt; font-weight:normal rules
-                            </label>
+                            <p className="text-gray-500 text-[11px] leading-normal font-sans">
+                              Removes manual break tags inside blocks like p, h1-h6, and li elements.
+                            </p>
                           </div>
                         </div>
 
-                        {/* 6. Links */}
-                        <div>
-                          <p className="font-bold text-gray-500 mb-2 bg-gray-50 py-1 px-2 rounded text-[10px] uppercase tracking-wide">Link cleanup</p>
-                          <div className="grid grid-cols-1 gap-2 pl-1">
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.removeHrefs}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, removeHrefs: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove all href tag attributes only
+                        {/* 10. Remove link target attributes */}
+                        <div className="flex items-start gap-3">
+                          <input 
+                            type="checkbox" 
+                            id="check-remove-targets"
+                            checked={cleanOptions.removeTargets}
+                            onChange={(e) => setCleanOptions(prev => ({ ...prev, removeTargets: e.target.checked }))}
+                            className="accent-[#2c7be5] h-4 w-4 mt-0.5 rounded border-gray-300 cursor-pointer shrink-0" 
+                          />
+                          <div>
+                            <label htmlFor="check-remove-targets" className="font-bold text-gray-700 hover:text-gray-900 cursor-pointer block text-xs">
+                              Remove link target attributes
                             </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.removeLinks}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, removeLinks: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Strip hyperlinked wrappers entirely
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.removeTargets}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, removeTargets: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove target attributes
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.removeRels}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, removeRels: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove rel values
-                            </label>
+                            <p className="text-gray-500 text-[11px] leading-normal font-sans">
+                              Strips target="_blank" and other target configurations from links.
+                            </p>
                           </div>
                         </div>
 
-                        {/* 7. Tables */}
-                        <div>
-                          <p className="font-bold text-gray-500 mb-2 bg-gray-50 py-1 px-2 rounded text-[10px] uppercase tracking-wide">Table cleanup</p>
-                          <div className="grid grid-cols-1 gap-2 pl-1">
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.tableDims}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, tableDims: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove table width / spacing dimensions
+                        {/* 11. Remove link rel attributes */}
+                        <div className="flex items-start gap-3">
+                          <input 
+                            type="checkbox" 
+                            id="check-remove-rels"
+                            checked={cleanOptions.removeRels}
+                            onChange={(e) => setCleanOptions(prev => ({ ...prev, removeRels: e.target.checked }))}
+                            className="accent-[#2c7be5] h-4 w-4 mt-0.5 rounded border-gray-300 cursor-pointer shrink-0" 
+                          />
+                          <div>
+                            <label htmlFor="check-remove-rels" className="font-bold text-gray-700 hover:text-gray-900 cursor-pointer block text-xs">
+                              Remove link rel attributes
                             </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.tableBorders}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, tableBorders: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove borders properties
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.tableStyles}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, tableStyles: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove table inline style elements
-                            </label>
+                            <p className="text-gray-500 text-[11px] leading-normal font-sans">
+                              Strips rel attributes (e.g., noopener, noreferrer) from links.
+                            </p>
                           </div>
                         </div>
 
-                        {/* 8. Whitespace */}
-                        <div>
-                          <p className="font-bold text-gray-500 mb-2 bg-gray-50 py-1 px-2 rounded text-[10px] uppercase tracking-wide">Whitespace & formatting</p>
-                          <div className="grid grid-cols-1 gap-2 pl-1">
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.spaces}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, spaces: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Collapse multiple spacing sequences
+                        {/* 12. Remove table width, height, cellpadding, cellspacing, border attributes */}
+                        <div className="flex items-start gap-3">
+                          <input 
+                            type="checkbox" 
+                            id="check-table-attrs"
+                            checked={cleanOptions.tableAttrs}
+                            onChange={(e) => setCleanOptions(prev => ({ ...prev, tableAttrs: e.target.checked }))}
+                            className="accent-[#2c7be5] h-4 w-4 mt-0.5 rounded border-gray-300 cursor-pointer shrink-0" 
+                          />
+                          <div>
+                            <label htmlFor="check-table-attrs" className="font-bold text-gray-700 hover:text-gray-900 cursor-pointer block text-xs">
+                              Remove table dimensions & border attributes
                             </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.blankLines}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, blankLines: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Remove extra blank lines
-                            </label>
-                            <label className="flex items-center gap-2 font-medium text-gray-600 hover:text-gray-900 cursor-pointer">
-                              <input 
-                                type="checkbox" 
-                                checked={cleanOptions.trimTags}
-                                onChange={(e) => setCleanOptions(prev => ({ ...prev, trimTags: e.target.checked }))}
-                                className="accent-[#2c7be5] h-3.5 w-3.5 rounded border-gray-300 cursor-pointer" 
-                              />
-                              Trim inner whitespace
-                            </label>
+                            <p className="text-gray-500 text-[11px] leading-normal font-sans">
+                              Strips fixed width, height, cellpadding, cellspacing, and border parameters from tables.
+                            </p>
                           </div>
                         </div>
 
@@ -2110,6 +1920,7 @@ export default function App() {
                     onChange={(e) => {
                       setDocumentHtml(e.target.value);
                       calculateCounters(e.target.value);
+                      setHtmlIsDirty(true);
                     }}
                     className="w-full h-full bg-transparent text-[#f8f8f2] font-mono text-[13px] leading-6 p-4 outline-none border-0 block resize-none z-10 whitespace-pre overflow-auto font-medium"
                     style={{ caretColor: 'white' }}
