@@ -208,6 +208,10 @@ export default function App() {
 <p>You can even find & replace phrases with the tool, toggle immediate code inline, or export the resulting clean workspace into <code>.html</code> or <code>.txt</code> formats instantly.</p>`
   );
 
+  const [canUndo, setCanUndo] = useState<boolean>(false);
+  const [canRedo, setCanRedo] = useState<boolean>(false);
+  const [currentFormatBlock, setCurrentFormatBlock] = useState<string>('P');
+
   const [originalBeforeClean, setOriginalBeforeClean] = useState<string>('');
   const [hasCleanedHistory, setHasCleanedHistory] = useState<boolean>(false);
   
@@ -342,13 +346,19 @@ export default function App() {
           case 'z':
             if (activeTab === 'word' && quillRef.current) {
               e.preventDefault();
-              quillRef.current.history.undo();
+              const history = quillRef.current.history || quillRef.current.getModule('history');
+              if (history) {
+                history.undo();
+              }
             }
             break;
           case 'y':
             if (activeTab === 'word' && quillRef.current) {
               e.preventDefault();
-              quillRef.current.history.redo();
+              const history = quillRef.current.history || quillRef.current.getModule('history');
+              if (history) {
+                history.redo();
+              }
             }
             break;
           case 'b':
@@ -459,14 +469,46 @@ export default function App() {
 
       quillRef.current = quill;
 
+      const updateLocalToolbar = () => {
+        try {
+          const formats = quill.getFormat();
+          let matchedFormat = 'P';
+          if (formats.header) {
+            matchedFormat = 'H' + formats.header;
+          } else if (formats.blockquote) {
+            matchedFormat = 'BLOCKQUOTE';
+          } else if (formats['code-block']) {
+            matchedFormat = 'PRE';
+          }
+          setCurrentFormatBlock(matchedFormat);
+
+          const historyModule = quill.history || quill.getModule('history');
+          const canUndoStatus = (historyModule?.stack?.undo?.length || 0) > 0;
+          const canRedoStatus = (historyModule?.stack?.redo?.length || 0) > 0;
+          setCanUndo(canUndoStatus);
+          setCanRedo(canRedoStatus);
+        } catch (err) {
+          console.warn("Failed to update local toolbar", err);
+        }
+      };
+
       // Set initial content
       quill.root.innerHTML = documentHtml;
+
+      // Update initial toolbar state
+      updateLocalToolbar();
 
       // Listen for text-change events and sync state changes
       quill.on('text-change', () => {
         const content = quill.root.innerHTML;
         setDocumentHtml(content);
         calculateCounters(content);
+        updateLocalToolbar();
+      });
+
+      // Listen for selection-change events and sync state changes
+      quill.on('selection-change', () => {
+        updateLocalToolbar();
       });
 
       // Right-click context menu on table elements inside Quill
@@ -659,13 +701,19 @@ export default function App() {
 
   const handleUndo = () => {
     if (activeTab === 'word' && quillRef.current) {
-      quillRef.current.history.undo();
+      const history = quillRef.current.history || quillRef.current.getModule('history');
+      if (history) {
+        history.undo();
+      }
     }
   };
 
   const handleRedo = () => {
     if (activeTab === 'word' && quillRef.current) {
-      quillRef.current.history.redo();
+      const history = quillRef.current.history || quillRef.current.getModule('history');
+      if (history) {
+        history.redo();
+      }
     }
   };
 
@@ -1244,15 +1292,26 @@ setOriginalBeforeClean(initialText);
             id="tab-word-panel-content" 
             className={`flex flex-col flex-grow ${activeTab === 'word' ? '' : 'hidden'}`}
           >
-              
-              {/* Rich Text Custom Toolbar */}
+                             {/* Rich Text Custom Toolbar */}
               <div id="rich-toolbar-dock" className="bg-[#f8f9fa] border-b border-[#dee2e6] p-2 flex flex-wrap gap-1 items-center select-none text-gray-700">
                 
                 {/* Undo / Redo */}
-                <button type="button" onClick={handleUndo} title="Undo (Ctrl+Z)" className="p-1.5 rounded hover:bg-gray-200 text-gray-700">
+                <button 
+                  type="button" 
+                  onClick={handleUndo} 
+                  disabled={!canUndo} 
+                  title="Undo (Ctrl+Z)" 
+                  className={`p-1.5 rounded text-gray-700 ${!canUndo ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-200'}`}
+                >
                   <Undo className="w-4 h-4 stroke-[2.5]" />
                 </button>
-                <button type="button" onClick={handleRedo} title="Redo (Ctrl+Y)" className="p-1.5 rounded hover:bg-gray-200 text-gray-700">
+                <button 
+                  type="button" 
+                  onClick={handleRedo} 
+                  disabled={!canRedo} 
+                  title="Redo (Ctrl+Y)" 
+                  className={`p-1.5 rounded text-gray-700 ${!canRedo ? 'opacity-40 cursor-not-allowed' : 'hover:bg-gray-200'}`}
+                >
                   <Redo className="w-4 h-4 stroke-[2.5]" />
                 </button>
                 <div className="h-5 w-[1px] bg-gray-300 mx-1"></div>
@@ -1268,12 +1327,10 @@ setOriginalBeforeClean(initialText);
                   id="toolbar-format-block-select"
                   onChange={(e) => {
                     executeCommand('formatBlock', e.target.value);
-                    e.target.value = '';
                   }}
                   className="p-1 text-xs border border-gray-300 rounded bg-white hover:border-gray-400 font-semibold outline-none focus:ring-1 focus:ring-[#2c7be5]"
-                  defaultValue=""
+                  value={currentFormatBlock}
                 >
-                  <option value="" disabled>Format...</option>
                   <option value="P">Paragraph</option>
                   <option value="H1">Heading 1</option>
                   <option value="H2">Heading 2</option>
