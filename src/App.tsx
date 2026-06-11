@@ -980,12 +980,11 @@ export default function App() {
       return;
     }
 
-    // IMPORTANT: Always get raw content from Quill (not documentHtml which has formatting artifacts)
-    // If on HTML tab and user edited manually, use that. Otherwise always use Quill's raw innerHTML.
-    const initialText = (activeTab === 'html' && htmlTextareaRef.current)
-      ? htmlTextareaRef.current.value
-      : (quillRef.current ? quillRef.current.root.innerHTML : documentHtml);
-    setOriginalBeforeClean(quillRef.current ? quillRef.current.root.innerHTML : initialText);
+// ALWAYS use Quill's raw innerHTML - never the textarea which has formatted HTML with newlines
+const initialText = quillRef.current
+  ? quillRef.current.root.innerHTML
+  : documentHtml.replace(/\n\s*/g, '');
+setOriginalBeforeClean(initialText);
 
     // Map the checkboxes to the options format
     const options = {
