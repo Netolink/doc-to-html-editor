@@ -281,6 +281,7 @@ export default function App() {
   const quillRef = useRef<any>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const htmlTextareaRef = useRef<HTMLTextAreaElement>(null);
+  const lineNumbersRef = useRef<HTMLDivElement>(null);
   const tablePickerRef = useRef<HTMLDivElement>(null);
   const cleanPanelRef = useRef<HTMLDivElement>(null);
   const tableContextMenuRef = useRef<HTMLDivElement>(null);
@@ -1843,6 +1844,7 @@ setOriginalBeforeClean(initialText);
                 {/* Dynamically Styled Line Numbers column */}
                 <div 
                   id="code-lines-sidebar"
+                  ref={lineNumbersRef}
                   className="w-12 bg-[#1b1c19] border-r border-[#2d2e2a] py-4 text-right pr-3 select-none text-[#5c6370] font-mono text-[11px] leading-6 overflow-hidden max-h-[600px]"
                 >
                   {lineCountArray.map(ln => (
@@ -1859,6 +1861,11 @@ setOriginalBeforeClean(initialText);
                       setDocumentHtml(e.target.value);
                       calculateCounters(e.target.value);
                       setHtmlIsDirty(true);
+                    }}
+                    onScroll={(e) => {
+                      if (lineNumbersRef.current) {
+                        lineNumbersRef.current.scrollTop = e.currentTarget.scrollTop;
+                      }
                     }}
                     className="w-full h-full bg-transparent text-[#f8f8f2] font-mono text-[13px] leading-6 p-4 outline-none border-0 block resize-none z-10 whitespace-pre overflow-auto font-medium"
                     style={{ caretColor: 'white' }}
